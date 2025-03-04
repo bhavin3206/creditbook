@@ -43,6 +43,8 @@
 
 
 from .models import User, Customer, Transaction, PaymentReminder
+from rest_framework import filters
+from django.db.models import Q
 from .serializers import (
     SignupSerializer, SigninSerializer, LogoutSerializer,
     CustomerSerializer, TransactionSerializer, PaymentReminderSerializer
@@ -110,6 +112,7 @@ class CustomerListCreateView(generics.ListCreateAPIView):
         if Customer.objects.filter(name=request.data.get("name")).exists():
             return Response({"message": "Customer with this name already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
+
         return super().create(request, *args, **kwargs)
 
 
@@ -149,42 +152,43 @@ class TransactionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = TransactionSerializer
     queryset = Transaction.objects.all().order_by('-created_at')
+    filter_backends = [filters.OrderingFilter, filters.SearchFilter]
 
-    def perform_create(self, serializer):
-        transaction = serializer.save()
+    ordering_fields = ['date', 'amount']
+    ordering = ['-created_at']
+    search_fields = ['customer__name', 'description']
 
+    def get_queryset(self):
+        """
+        Manually filter transactions based on query parameters
+        """
+        queryset = Transaction.objects.all().order_by('-created_at')
 
-# ---------------------------- Transaction Views ----------------------------
-class TransactionDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = TransactionSerializer
-    queryset = Transaction.objects.all()
+        customer_name = self.request.query_params.get('customer_name')
+        customer_id = self.request.query_params.get('customer_id')
+        transaction_type = self.request.query_params.get('transaction_type')
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        specific_date = self.request.query_params.get('specific_date')  # New parameter
+        amount = self.request.query_params.get('amount')
+        description_keyword = self.request.query_params.get('description')  # New filter
 
-#----------------------------- Transaction Delete Views ---------------------
-class TransactionDeleteView(generics.DestroyAPIView):
-    permission_classes = [IsAuthenticated]
-    queryset = Transaction.objects.all()
-    lookup_field = "pk"  # Allows deleting by primary key (id)
+        if customer_name:
+            queryset = queryset.filter(customer__name__icontains=customer_name)
 
-    def delete(self, request, *args, **kwargs):
-        try:
-            transaction = self.get_object()
-            transaction.delete()
-            return Response({"message": "Transaction deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-        except Transaction.DoesNotExist:
-            return Response({"message": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
+        if customer_id:
+            queryset = queryset.filter(customer__id=customer_id)
 
-# ---------------------------- Payment Reminder Views ----------------------------
-class PaymentReminderListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = PaymentReminderSerializer
-    queryset = PaymentReminder.objects.all().order_by('-reminder_date')
+        if transaction_type:
+            queryset = queryset.filter(transaction_type=transaction_type)
 
+        if specific_date:
+            queryset = queryset.filter(date=specific_date)  # Exact date match
 
-class PaymentReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = PaymentReminderSerializer
-    queryset = PaymentReminder.objects.all()
+        if start_date and end_date:
+            queryset = queryset.filter(date__range=[start_date, end_date])
+
+        if amount:
             queryset = queryset.filter(amount=amount)
 
         if description_keyword:
