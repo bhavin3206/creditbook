@@ -26,6 +26,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+media/*
+!media/default_profile/
+!media/default_profile/avatar_blank.jpg
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
