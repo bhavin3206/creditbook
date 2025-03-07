@@ -32,7 +32,13 @@ def SignupView(request):
 def user_login(request):
     if request.method == 'POST':
         username = request.data.get('username')
+        if not username:
+            return Response({'message': 'username field required'}, status=status.HTTP_400_BAD_REQUEST)
+
         password = request.data.get('password')
+        if not password:
+            return Response({'message': 'password field required'}, status=status.HTTP_400_BAD_REQUEST)
+
         user = None
         if '@' in username:
             try:
@@ -47,7 +53,7 @@ def user_login(request):
             token, _ = Token.objects.get_or_create(user=user)
             return Response({'token': token.key}, status=status.HTTP_200_OK)
 
-        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'message': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 # ---------------------------- Logout View ----------------------------
@@ -61,20 +67,6 @@ def user_logout(request):
             return Response({'message': 'Successfully logged out.'}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
-# ---------------------------- Logout View ----------------------------
-class LogoutView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = LogoutSerializer
-
-    def post(self, request):
-        serializer = self.get_serializer(data=request.data, context={'request': request})  # Pass context
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Logout successful"}, status=status.HTTP_205_RESET_CONTENT)
-        return Response({"message":serializer.errors[0]}, status=status.HTTP_400_BAD_REQUEST)
 
 #----------------------------- Refresh Token View ----------------------------
 class CustomTokenRefreshView(TokenRefreshView):
@@ -97,12 +89,21 @@ class CustomerListCreateView(generics.ListCreateAPIView):
     queryset = Customer.objects.all().order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
-        # Check if customer with the same name already exists
-        if Customer.objects.filter(name=request.data.get("name")).exists():
-            return Response({"message": "Customer with this name already exists."}, status=status.HTTP_400_BAD_REQUEST)
-
-
-        return super().create(request, *args, **kwargs)
+        customer_name = request.data.get("name")
+        serializer = self.get_serializer(data=request.data)
+        
+        try:
+            if serializer.is_valid(raise_exception=True):
+                self.perform_create(serializer)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as e:
+            response = str(next(iter(e.detail.values())))
+            
+            if "This field is required." in response:
+                response = str(next(iter(e.detail.keys()))) + " field is required"
+                return Response({"message": response}, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({"message": str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -121,10 +122,14 @@ class DeleteCustomerView(generics.DestroyAPIView):
     serializer_class = CustomerSerializer
 
     def delete(self, request, *args, **kwargs):
-        customer = self.get_object()
-        customer_name = customer.name
-        self.perform_destroy(customer)
-        return Response({"message": f"Customer '{customer_name}' deleted successfully!"}, status=status.HTTP_200_OK)
+        try:
+            customer = self.get_object()
+            customer_name = customer.name
+            self.perform_destroy(customer)
+            return Response({"message": f"Customer '{customer_name}' deleted successfully!"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"message": "Customer not found or alredy delete"}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
