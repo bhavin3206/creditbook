@@ -2,20 +2,13 @@ from django.urls import path
 from django.conf.urls.static import static
 from django.conf import settings
 
-from .views import (
-    SignupView, SigninView, LogoutView,
-    CustomerListCreateView, CustomerDetailView,
-    DeleteCustomerView, CustomTokenRefreshView,
-    CustomerTransactionsView, TransactionDeleteView,
-    TransactionListCreateView, TransactionDetailView,
-    PaymentReminderListCreateView, PaymentReminderDetailView
-)
+from .views import *
 
 urlpatterns = [
     # Authentication URLs
-    path('signup/', SignupView.as_view(), name='signup'),
-    path('signin/', SigninView.as_view(), name='signin'),
-    path('logout/', LogoutView.as_view(), name='logout'),
+    path('signup/', SignupView, name='signup'),
+    path('signin/', user_login, name='signin'),
+    path('logout/', user_logout, name='logout'),
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
 
 

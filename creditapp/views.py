@@ -1,78 +1,67 @@
-# from .models import *
-# from .serializers import *
-# from rest_framework.response import Response
-# from rest_framework import generics
-# from rest_framework_api_key.permissions import HasAPIKey
-# from rest_framework.permissions import AllowAny, IsAuthenticated
-# from rest_framework import status
-
-
-# # Create your views here.
-# class SignupView(generics.ListCreateAPIView):
-#     permission_classes  = [AllowAny]
-#     serializer_class    = SignupSerializer
-#     queryset            = User.objects.all().order_by('-id')
-
-#     def post(self, request, *args, **kwargs):
-#         return super().post(request, *args, **kwargs)
-
-# class SigninView(generics.GenericAPIView):
-#     permission_classes      = [AllowAny]
-#     serializer_class        = SigninSerializer
-#     queryset                = User.objects.all().order_by('-id')
-
-#     def post(self,request):
-#         serializer = self.serializer_class(data=request.data)
-#         if serializer.is_valid():
-#             return Response(serializer.validated_data,status=status.HTTP_200_OK)
-#         else:
-#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-# class LogoutView(generics.GenericAPIView):
-#     permission_classes = [IsAuthenticated]
-#     serializer_class = LogoutSerializer
-
-#     def post(self, request):
-#         serializer = self.serializer_class(data=request.data)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response({"message": "Logout successful"}, status=status.HTTP_205_RESET_CONTENT)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-from .models import User, Customer, Transaction, PaymentReminder
-from rest_framework import filters
-from django.db.models import Q
-from .serializers import (
-    SignupSerializer, SigninSerializer, LogoutSerializer,
-    CustomerSerializer, TransactionSerializer, PaymentReminderSerializer
-)
-from rest_framework_simplejwt.views import TokenRefreshView
+from .models import *
+from django.core.exceptions import ObjectDoesNotExist
+from django.contrib.auth import authenticate
+from rest_framework import filters, generics, status
 from rest_framework.response import Response
-from rest_framework import generics, status
+from rest_framework.exceptions import NotFound
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
-
+from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.views import TokenRefreshView
+from .serializers import *
 
 # ---------------------------- Signup View ----------------------------
-class SignupView(generics.ListCreateAPIView):
-    permission_classes = [AllowAny]
-    serializer_class = SignupSerializer
-    queryset = User.objects.all().order_by('-id')
+@api_view(['POST'])
+def SignupView(request):
+    if request.method == 'POST':
+        serializer = SignupSerializer(data=request.data)
+        try:
+            if serializer.is_valid(raise_exception=True):
+                user = serializer.save()
+                return Response({"message": "User  created successfully."}, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as e:
+            response = str(next(iter(e.detail.values())))
+            if "This field is required." in response: 
+                response = str(next(iter(e.detail.keys()))) + " field is required"
+                return Response({"message":response}, status=status.HTTP_400_BAD_REQUEST)
 
+            return Response({"message":str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
 
 # ---------------------------- Signin View ----------------------------
-class SigninView(generics.GenericAPIView):
-    permission_classes = [AllowAny]
-    serializer_class = SigninSerializer
-    queryset = User.objects.all().order_by('-id')
+@api_view(['POST'])
+def user_login(request):
+    if request.method == 'POST':
+        username = request.data.get('username')
+        password = request.data.get('password')
+        user = None
+        if '@' in username:
+            try:
+                user = User.objects.get(email=username)
+            except ObjectDoesNotExist:
+                pass
 
-    def post(self, request):
-        serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            return Response({"message": serializer.validated_data}, status=status.HTTP_200_OK)
-        return Response({"message": serializer.errors["non_field_errors"][0]}, status=status.HTTP_400_BAD_REQUEST)
+        if not user:
+            user = authenticate(username=username, password=password)
+
+        if user:
+            token, _ = Token.objects.get_or_create(user=user)
+            return Response({'token': token.key}, status=status.HTTP_200_OK)
+
+        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+# ---------------------------- Logout View ----------------------------
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def user_logout(request):
+    if request.method == 'POST':
+        try:
+            # Delete the user's token to logout
+            request.user.auth_token.delete()
+            return Response({'message': 'Successfully logged out.'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 # ---------------------------- Logout View ----------------------------
@@ -121,6 +110,8 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CustomerSerializer
     queryset = Customer.objects.all()
 
+
+# ---------------------------- Delete Customer Views ----------------------------
 class DeleteCustomerView(generics.DestroyAPIView):
     """
     API to delete a customer and all related transactions.
