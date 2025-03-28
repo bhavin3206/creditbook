@@ -9,6 +9,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import *
+from rest_framework.generics import UpdateAPIView
+from django.shortcuts import get_object_or_404, get_list_or_404
+from django.http import Http404
+from datetime import date
 
 # ---------------------------- Signup View ----------------------------
 @api_view(['POST'])
@@ -50,10 +54,42 @@ def user_login(request):
             user = authenticate(username=username, password=password)
 
         if user:
+            Token.objects.filter(user=user).delete()
+            
             token, _ = Token.objects.get_or_create(user=user)
-            return Response({'token': token.key}, status=status.HTTP_200_OK)
+            data = {
+                "email" : user.email,
+                "address" : user.address,
+                "category" : user.category,
+                "first_name" : user.first_name,
+                "last_name" : user.last_name,
+                "mobile_number" : user.mobile_number,
+                'profile_picture': user.profile_picture.url if user.profile_picture else None,  # Handle None for profile_picture
+                'token': token.key
+            }
+            return Response(data, status=status.HTTP_200_OK)
 
         return Response({'message': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+# ---------------------------- User Edit View ----------------------------
+class UserEditAPIView(UpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]  # Ensure the user is authenticated to edit
+
+    def get_object(self):
+        return self.request.user  # Assumes you're updating the currently authenticated user
+
+    def update(self, request, *args, **kwargs):
+        # Overriding to perform any extra actions before updating
+        user = self.get_object()
+
+        # Ensure the user is editing their own details
+        if user != request.user :
+            return Response({"message": "Not Found."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Proceed with update
+        return super().update(request, *args, **kwargs)
+
 
 
 # ---------------------------- Logout View ----------------------------
@@ -84,32 +120,37 @@ class CustomTokenRefreshView(TokenRefreshView):
 
 # ---------------------------- Customer Views ----------------------------
 class CustomerListCreateView(generics.ListCreateAPIView):
+    """
+    API endpoint to list all customers or create a new customer.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = CustomerSerializer
-    queryset = Customer.objects.all().order_by('-created_at')
 
-    def create(self, request, *args, **kwargs):
-        customer_name = request.data.get("name")
-        serializer = self.get_serializer(data=request.data)
-        
-        try:
-            if serializer.is_valid(raise_exception=True):
-                self.perform_create(serializer)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-        except serializers.ValidationError as e:
-            response = str(next(iter(e.detail.values())))
-            
-            if "This field is required." in response:
-                response = str(next(iter(e.detail.keys()))) + " field is required"
-                return Response({"message": response}, status=status.HTTP_400_BAD_REQUEST)
-            
-            return Response({"message": str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
+    def get_queryset(self):
+        """
+        Only return customers belonging to the authenticated user.
+        """
+        return Customer.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        """
+        Assign the authenticated user to the newly created customer.
+        """
+        serializer.save(user=self.request.user)
 
 
 class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    API endpoint to retrieve, update, or delete a specific customer.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = CustomerSerializer
-    queryset = Customer.objects.all()
+
+    def get_queryset(self):
+        """
+        Ensure the customer being accessed belongs to the authenticated user.
+        """
+        return Customer.objects.filter(user=self.request.user)
 
 
 # ---------------------------- Delete Customer Views ----------------------------
@@ -118,18 +159,22 @@ class DeleteCustomerView(generics.DestroyAPIView):
     API to delete a customer and all related transactions.
     """
     permission_classes = [IsAuthenticated]
-    queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
+
+    def get_queryset(self):
+        """Ensure customers belong to the authenticated user."""
+        return Customer.objects.filter(user=self.request.user)
 
     def delete(self, request, *args, **kwargs):
         try:
-            customer = self.get_object()
-            customer_name = customer.name
+            customer_id = self.kwargs.get("pk")
+            customer = get_object_or_404(Customer, id=customer_id, user=self.request.user)
             self.perform_destroy(customer)
-            return Response({"message": f"Customer '{customer_name}' deleted successfully!"}, status=status.HTTP_200_OK)
+            return Response({"message": f"Customer '{customer.name}' deleted successfully!"}, status=status.HTTP_200_OK)
+        except Http404:  # Catch customer not found
+            return Response({"message": "Customer not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({"message": "Customer not found or alredy delete"}, status=status.HTTP_400_BAD_REQUEST)
-
+            return Response({"message": "An error occurred while deleting the customer."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -139,56 +184,95 @@ class CustomerTransactionsView(generics.ListAPIView):
     serializer_class = TransactionSerializer
 
     def get_queryset(self):
-        customer_id = self.kwargs['customer_id']
-        return Transaction.objects.filter(customer_id=customer_id)
+        """
+        Ensure the authenticated user can only retrieve transactions for their own customers.
+        """
+        customer_id = self.kwargs.get('customer_id')
+        user = self.request.user
 
+        try:
+            customer = get_object_or_404(Customer, id=customer_id, user=user)
+        except Http404:
+            raise Http404("Customer not found.")  # Custom error message
+
+        return Transaction.objects.filter(customer=customer)
+
+    def list(self, request, *args, **kwargs):
+        """
+        Override list method to return a custom error response instead of Django's default 404.
+        """
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Http404 as e:
+            return Response({"message": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
 # ---------------------------- Transaction Views ----------------------------
 class TransactionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = TransactionSerializer
-    queryset = Transaction.objects.all().order_by('-created_at')
     filter_backends = [filters.OrderingFilter, filters.SearchFilter]
-
     ordering_fields = ['date', 'amount']
     ordering = ['-created_at']
     search_fields = ['customer__name', 'description']
 
     def get_queryset(self):
         """
-        Manually filter transactions based on query parameters
+        Returns transactions belonging to the authenticated user's customers,
+        with additional filtering options.
         """
-        queryset = Transaction.objects.all().order_by('-created_at')
-
+        user = self.request.user
+        queryset = Transaction.objects.filter(customer__user=user)
+        # breakpoint()
+        # Get filter parameters
         customer_name = self.request.query_params.get('customer_name')
         customer_id = self.request.query_params.get('customer_id')
         transaction_type = self.request.query_params.get('transaction_type')
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
-        specific_date = self.request.query_params.get('specific_date')  # New parameter
+        specific_date = self.request.query_params.get('specific_date')
         amount = self.request.query_params.get('amount')
-        description_keyword = self.request.query_params.get('description')  # New filter
+        description_keyword = self.request.query_params.get('description')
+        payment_status = self.request.query_params.get('payment_status')  # New filter
 
+        today = date.today()
+
+        # Filter by customer name (case-insensitive)
         if customer_name:
             queryset = queryset.filter(customer__name__icontains=customer_name)
 
+        # Filter by customer ID
         if customer_id:
             queryset = queryset.filter(customer__id=customer_id)
 
+        # Filter by transaction type (credit/debit)
         if transaction_type:
             queryset = queryset.filter(transaction_type=transaction_type)
 
+        # Filter by specific date
         if specific_date:
-            queryset = queryset.filter(date=specific_date)  # Exact date match
+            queryset = queryset.filter(date=specific_date)
 
+        # Filter by date range
         if start_date and end_date:
             queryset = queryset.filter(date__range=[start_date, end_date])
 
+        # Filter by amount
         if amount:
             queryset = queryset.filter(amount=amount)
 
+        # Filter by description keyword
         if description_keyword:
-            queryset = queryset.filter(description__icontains=description_keyword)  # Filters by word in description
+            queryset = queryset.filter(description__icontains=description_keyword)
+
+        # Filter transactions based on associated PaymentReminder due status
+        if payment_status == "overdue":
+            queryset = queryset.filter(reminders__reminder_date__lt=today, reminders__status="pending").distinct()
+        elif payment_status == "upcoming":
+            queryset = queryset.filter(reminders__reminder_date__gt=today, reminders__status="pending").distinct()
+        elif payment_status == "due_today":
+            queryset = queryset.filter(reminders__reminder_date=today, reminders__status="pending").distinct()
 
         return queryset
 
@@ -200,30 +284,64 @@ class TransactionListCreateView(generics.ListCreateAPIView):
 class TransactionDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = TransactionSerializer
-    queryset = Transaction.objects.all()
+
+    def get_queryset(self):
+        """
+        Only allow retrieving transactions belonging to the authenticated user.
+        """
+        return Transaction.objects.filter(customer__user=self.request.user)
 
 #----------------------------- Transaction Delete Views ---------------------
 class TransactionDeleteView(generics.DestroyAPIView):
     permission_classes = [IsAuthenticated]
-    queryset = Transaction.objects.all()
-    lookup_field = "pk"  # Allows deleting by primary key (id)
+    lookup_field = "pk"
+
+    def get_queryset(self):
+        """
+        Ensure only the authenticated user's transactions can be deleted.
+        """
+        return Transaction.objects.filter(customer__user=self.request.user)
 
     def delete(self, request, *args, **kwargs):
-        try:
-            transaction = self.get_object()
-            transaction.delete()
-            return Response({"message": "Transaction deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-        except Transaction.DoesNotExist:
-            return Response({"message": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
+        """
+        Handle transaction deletion with user validation.
+        """
+        transaction = self.get_object()
+        self.perform_destroy(transaction)
+        return Response({"message": "Transaction deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
 # ---------------------------- Payment Reminder Views ----------------------------
 class PaymentReminderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PaymentReminderSerializer
-    queryset = PaymentReminder.objects.all().order_by('-reminder_date')
+
+    def get_queryset(self):
+        """
+        Return payment reminders for customers or transactions 
+        belonging to the authenticated user.
+        """
+        return PaymentReminder.objects.filter(
+            models.Q(customer__user=self.request.user) | 
+            models.Q(transaction__customer__user=self.request.user)
+        )
+    
+    def perform_create(self, serializer):
+        """
+        Create a reminder after validation in the serializer.
+        """
+        serializer.save()
+
 
 
 class PaymentReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PaymentReminderSerializer
-    queryset = PaymentReminder.objects.all()
+
+    def get_queryset(self):
+        """
+        Return only reminders that belong to the authenticated user's customers or transactions.
+        """
+        return PaymentReminder.objects.filter(
+            models.Q(customer__user=self.request.user) | 
+            models.Q(transaction__customer__user=self.request.user)
+        )

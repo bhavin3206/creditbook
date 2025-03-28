@@ -6,7 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework.authtoken.models import Token
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 import re
-
+from datetime import date
 # ---------------------------- Signup Serializer ----------------------------
 class SignupSerializer(serializers.ModelSerializer):
     mobile_number = serializers.CharField(required=True)  # Required mobile number
@@ -61,29 +61,122 @@ class SignupSerializer(serializers.ModelSerializer):
 
         return user
 
+# ---------------------------- User Edit Serializer ----------------------------
+class UserSerializer(serializers.ModelSerializer):
+    mobile_number = serializers.CharField(required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            'email', 'address', 'category', 'first_name', 'last_name', 
+            'mobile_number', 'profile_picture'
+        ]
+
+        read_only_fields = ['password', 'is_approved', 'is_verified', 'is_active', 'is_owner', 'is_staff']
+
+    
+
+
 # ---------------------------- Customer Serializer ----------------------------
 class CustomerSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Customer
-        exclude = ('created_at', 'updated_at')  # Excludes these fields
-        
+        fields = ['id','name', 'contact_number', 'email', 'address', 'account_balance', 'created_at', 'updated_at']  # Define the fields you want to allow
+        extra_kwargs = {
+            "email": {"required": False},
+            "address": {"required": False},
+        }
+
+    def validate(self, attrs):
+        """
+        Ensure that the customer being created or updated belongs to the authenticated user.
+        """
+        request_user = self.context['request'].user
+
+        # If updating an existing customer, ensure they belong to the user
+        if self.instance and self.instance.user != request_user:
+            raise serializers.ValidationError("Not Found.")
+
+        # If creating a new customer, ensure they belong to the user
+        if 'user' in attrs and attrs['user'] != request_user:
+            raise serializers.ValidationError("Not Found.")
+
+        return attrs
 
 # ---------------------------- Transaction Serializer ----------------------------
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        exclude = ('created_at', 'updated_at')  # Excludes these fields
+        fields = "__all__"
+        # exclude = ('updated_at',)  # Excludes these fields
 
     def create(self, validated_data):
-        transaction = super().create(validated_data)
-
-        # customer.save()
+        """
+        Add ownership validation for creating a transaction.
+        Ensure that the transaction is linked to a customer that belongs to the authenticated user.
+        """
+        customer = validated_data.get('customer')
+        user = self.context['request'].user
+        
+        if customer.user != user:  # Ensure the customer belongs to the authenticated user
+            raise serializers.ValidationError("You cannot create a transaction for another user's customer.")
+        
+        transaction = super().create(validated_data)  # Save the transaction
         return transaction
+
+    def validate(self, attrs):
+        """
+        Add ownership validation for updating an existing transaction.
+        Ensures that the transaction's customer belongs to the authenticated user.
+        """
+        if 'customer' in attrs:
+            customer = attrs['customer']
+            user = self.context['request'].user
+            if customer.user != user:  # Ensure the customer belongs to the authenticated user
+                raise serializers.ValidationError("Not Found.")
+        return attrs
 
 
 # ---------------------------- Payment Reminder Serializer ----------------------------
 class PaymentReminderSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentReminder
-        exclude = ('created_at', 'updated_at')  # Excludes these fields
+        exclude = ('updated_at',)  # Excludes these fields
+        extra_kwargs = {
+            "status": {"required": False},  
+            "customer": {"required": False, "allow_null": True},  
+            "transaction": {"required": False, "allow_null": True}  
+        }
 
+    def validate(self, attrs):
+        """
+        Ensure at least one of customer or transaction is provided.
+        Validate that the transaction belongs to the given customer if both are provided.
+        Validate that the customer/transaction belongs to the authenticated user.
+        """
+        request_user = self.context['request'].user
+        customer = attrs.get("customer")
+        transaction = attrs.get("transaction")
+        reminder_date = attrs.get("reminder_date")
+
+        # Ensure at least one is provided
+        if not customer and not transaction:
+            raise serializers.ValidationError("Either 'customer' or 'transaction' must be provided.")
+
+        # Ensure the transaction belongs to the given customer if both are provided
+        if transaction and customer and transaction.customer != customer:
+            raise serializers.ValidationError("The transaction must belong to the given customer.")
+
+        # Ensure customer belongs to authenticated user
+        if customer and customer.user != request_user:
+            raise serializers.ValidationError("Customer Not Found.")
+
+        # Ensure transaction belongs to authenticated user
+        if transaction and transaction.customer.user != request_user:
+            raise serializers.ValidationError("Transaction Not Found.")
+
+        if reminder_date and reminder_date == date.today():
+            raise serializers.ValidationError("Reminder date cannot be today.")
+
+        return attrs

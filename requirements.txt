@@ -1,0 +1,8 @@
+celery
+redis
+Django
+django-celery-results
+djangorestframework
+djangorestframework-api-key
+djangorestframework-simplejwt
+

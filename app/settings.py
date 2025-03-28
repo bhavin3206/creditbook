@@ -64,11 +64,7 @@ MIDDLEWARE = [
 
 
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES':(
-        'rest_framework.authentication.TokenAuthentication',
-    ),
-}
+
 
 # SIMPLE_JWT = {
 #     'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
@@ -132,6 +128,7 @@ DATABASES = {
 }
 
 
+
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
 
@@ -169,10 +166,75 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
 STATIC_URL = '/static/'
-MEDIA_URL   = '/media/'
-MEDIA_ROOT  = os.path.join(BASE_DIR,'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# added by manual
+
+MEDIA_URL   = '/media/'
+MEDIA_ROOT  = os.path.join(BASE_DIR,'media')
+
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django.core.cache.backends.redis.RedisCache",
+#         "LOCATION": "redis://localhost:6379/1",
+#     }
+# }
+
+# Token auth
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES':(
+        'rest_framework.authentication.TokenAuthentication',
+    ),
+}
+
+# Redis as Celery Broker
+# CELERY_BROKER_URL = "redis://172.20.80.1:6379/0"
+# CELERY_BROKER_URL = "redis://127.0.0.1:6379/1"
+# CELERY_ACCEPT_CONTENT = ["json"]
+# CELERY_TASK_SERIALIZER = "json"
+
+# # Optional: Store Celery task results in Django DB
+# INSTALLED_APPS += ["django_celery_results"]
+# CELERY_RESULT_BACKEND = "django-db"
+
+
+
+
+# from creditapp.tasks import add  
+# result = add.delay(10, 20)
+# print(result.get(timeout=5))
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
+#         },
+#         'simple': {
+#             'format': '%(levelname)s %(message)s'
+#         },
+#     },
+#     'handlers': {
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#             'formatter': 'simple'
+#         },
+#         'file': {
+#             'class': 'logging.FileHandler',
+#             'filename': 'logs/debug.log',
+#             'formatter': 'verbose'
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['console', 'file'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#     },
+# }

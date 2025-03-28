@@ -10,12 +10,12 @@ urlpatterns = [
     path('signin/', user_login, name='signin'),
     path('logout/', user_logout, name='logout'),
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
+    path('edit/', UserEditAPIView.as_view(), name='user-edit'),
 
 
     # Customer URLs
     path('customers/', CustomerListCreateView.as_view(), name='customer-list-create'),
     path('customers/<int:pk>/', CustomerDetailView.as_view(), name='customer-detail'),
-    path('delete-customer/<int:pk>/', DeleteCustomerView.as_view(), name='delete-customer'),
 
 
     # Transaction URLs

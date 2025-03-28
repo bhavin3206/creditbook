@@ -3,6 +3,10 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.core.files.storage import default_storage
 import os
 import uuid
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+from django.db.models import F
+
 
 # Custom User Manager
 class UserManager(BaseUserManager):
@@ -29,20 +33,11 @@ class UserManager(BaseUserManager):
 
 # User Model
 class User(AbstractBaseUser, PermissionsMixin):
-    # groups = models.ManyToManyField(
-    #     'auth.Group',
-    #     related_name='creditapp_user_set',  # Updated related_name to avoid clash
-    #     blank=True,
-    # )
-    # user_permissions = models.ManyToManyField(
-    #     'auth.Permission',
-    #     related_name='creditapp_user_set',  # Updated related_name to avoid clash
-    #     blank=True,
-    # )
 
     email = models.EmailField(max_length=50, unique=True, null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True)
+    customer = models.ForeignKey('Customer', on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     first_name = models.CharField(max_length=100, null=True, blank=True)
     last_name = models.CharField(max_length=100, null=True, blank=True)
     mobile_number = models.CharField(max_length=15, unique=True, db_index=True)
@@ -72,7 +67,8 @@ class Category(models.Model):
 
 # Customer Model
 class Customer(models.Model):
-    name = models.CharField(max_length=255, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customers')  # Use 'customers' for the reverse relationship
+    name = models.CharField(max_length=255)
     contact_number = models.CharField(max_length=20)
     email = models.EmailField(null=True, blank=True)  # Made optional
     address = models.TextField()
@@ -81,14 +77,12 @@ class Customer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def update_balance(self):
-        """
-        Automatically calculates balance based on transactions
-        """
-        credits = self.transactions.filter(transaction_type="credit").aggregate(models.Sum("amount"))["amount__sum"] or 0
-        debits = self.transactions.filter(transaction_type="debit").aggregate(models.Sum("amount"))["amount__sum"] or 0
-        self.account_balance = credits - debits
-        self.save()
+    class Meta:
+        # Unique constraint: name must be unique within the scope of each user
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'name'], name='unique_customer_name_per_user')
+        ]
+
 
     def delete(self, *args, **kwargs):
         """ Delete all transactions and their images first for fast processing """
@@ -139,14 +133,12 @@ class Transaction(models.Model):
         if self.customer:
             self.customer_name = self.customer.name
         super().save(*args, **kwargs)
-        self.customer.update_balance()
+        # self.customer.update_balance()
     
     def delete(self, *args, **kwargs):
         if self.bill_image and default_storage.exists(self.bill_image.name):
             self.bill_image.delete(save=False)
         super().delete(*args, **kwargs)
-        self.customer.update_balance()
-
 
     def __str__(self):
         return f"{self.customer.name} - {self.transaction_type} - {self.amount}"
@@ -155,11 +147,11 @@ class Transaction(models.Model):
 class PaymentReminder(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
-        ("sent", "Sent"),
         ("paid", "Paid"),
     ]
 
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="payment_reminders")
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="payment_reminders", null=True, blank=True)
+    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name="reminders", null=True, blank=True)
     amount_due = models.DecimalField(max_digits=12, decimal_places=2)
     reminder_date = models.DateField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
@@ -167,5 +159,63 @@ class PaymentReminder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        # Unique constraint: name must be unique within the scope of each user
+        constraints = [
+            models.UniqueConstraint(fields=['customer', 'transaction', 'amount_due'], name='unique_customer_name_per_transaction')
+        ]
+
     def __str__(self):
         return f"Reminder for {self.customer.name} - {self.status}"
+
+
+from django.db.models import F, Sum, Case, When, DecimalField
+
+
+
+@receiver(post_save, sender=Transaction)
+def update_balance_on_transaction_save(sender, instance, created, **kwargs):
+    """Handles balance updates when a transaction is created or updated."""
+    if created:
+        # New transaction: Apply balance change
+        delta = instance.amount if instance.transaction_type == "credit" else -instance.amount
+        Customer.objects.filter(id=instance.customer.id).update(account_balance=F('account_balance') + delta)
+    else:
+        # Transaction updated: Adjust for the old amount
+        try:
+            old_transaction = sender.objects.get(id=instance.id)
+            
+            # Compute balance difference
+            old_impact = old_transaction.amount if old_transaction.transaction_type == "credit" else -old_transaction.amount
+            new_impact = instance.amount if instance.transaction_type == "credit" else -instance.amount
+            net_change = new_impact - old_impact
+
+            # Apply net change
+            if net_change != 0:
+                Customer.objects.filter(id=instance.customer.id).update(account_balance=F('account_balance') + net_change)
+        except sender.DoesNotExist:
+            # If transaction record was missing, recalculate balance
+            recalculate_customer_balance(instance.customer.id)
+
+@receiver(post_delete, sender=Transaction)
+def update_balance_on_transaction_delete(sender, instance, **kwargs):
+    """Handles balance updates when a transaction is deleted."""
+    # Reverse the impact of the deleted transaction
+    delta = -instance.amount if instance.transaction_type == "credit" else instance.amount
+    Customer.objects.filter(id=instance.customer.id).update(account_balance=F('account_balance') + delta)
+
+def recalculate_customer_balance(customer_id):
+    """Fallback function to recalculate the entire balance in case of inconsistencies."""
+    result = Transaction.objects.filter(customer_id=customer_id).aggregate(
+        balance=Sum(
+            Case(
+                When(transaction_type="credit", then=F("amount")),
+                When(transaction_type="debit", then=-F("amount")),
+                default=0,
+                output_field=DecimalField()
+            )
+        )
+    )
+    
+    balance = result["balance"] or 0
+    Customer.objects.filter(id=customer_id).update(account_balance=balance)
