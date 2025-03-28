@@ -164,10 +164,6 @@ class PaymentReminderSerializer(serializers.ModelSerializer):
         if not customer and not transaction:
             raise serializers.ValidationError("Either 'customer' or 'transaction' must be provided.")
 
-        # Ensure the transaction belongs to the given customer if both are provided
-        if transaction and customer and transaction.customer != customer:
-            raise serializers.ValidationError("The transaction must belong to the given customer.")
-
         # Ensure customer belongs to authenticated user
         if customer and customer.user != request_user:
             raise serializers.ValidationError("Customer Not Found.")
@@ -175,6 +171,10 @@ class PaymentReminderSerializer(serializers.ModelSerializer):
         # Ensure transaction belongs to authenticated user
         if transaction and transaction.customer.user != request_user:
             raise serializers.ValidationError("Transaction Not Found.")
+        
+        # Ensure the transaction belongs to the given customer if both are provided
+        if transaction and customer and transaction.customer != customer:
+            raise serializers.ValidationError("The transaction must belong to the given customer.")
 
         if reminder_date and reminder_date == date.today():
             raise serializers.ValidationError("Reminder date cannot be today.")
