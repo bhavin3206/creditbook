@@ -131,13 +131,21 @@ class CustomerListCreateView(generics.ListCreateAPIView):
         Only return customers belonging to the authenticated user.
         """
         return Customer.objects.filter(user=self.request.user)
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            serializer.save(user=self.request.user)
+        except Exception as e:
+            if 'UNIQUE constraint failed:' in str(e):
+                return Response({'message': 'Customer with this Mobile number already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({'message': 'An unexpected error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def perform_create(self, serializer):
-        """
-        Assign the authenticated user to the newly created customer.
-        """
-        serializer.save(user=self.request.user)
-
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
     """

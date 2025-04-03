@@ -80,7 +80,7 @@ class Customer(models.Model):
     class Meta:
         # Unique constraint: name must be unique within the scope of each user
         constraints = [
-            models.UniqueConstraint(fields=['user', 'name'], name='unique_customer_name_per_user')
+            models.UniqueConstraint(fields=['user', 'name', 'contact_number'], name='unique_customer_name_per_user')
         ]
 
 
