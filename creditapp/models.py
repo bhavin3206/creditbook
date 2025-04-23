@@ -23,11 +23,11 @@ class UserManager(BaseUserManager):
         user.save()
         return user
 
-    def create_superuser(self, email, password):
+    def create_superuser(self, password, email=None , mobile_number=None):
         if not password:
             raise ValueError("Superuser must have a password")
-
-        user = self.create_user(email, password)
+                
+        user = self.create_user(password, mobile_number=mobile_number, email=email)
         user.is_superuser = True
         user.is_staff = True
         user.is_verified = True
