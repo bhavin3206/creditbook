@@ -50,15 +50,17 @@ class GoogleLoginView(APIView):
             
             # This depends on your auth solution (JWT, token, etc.)
             token, _ = Token.objects.get_or_create(user=user)
-            
+
             return Response({
-                'token': token.key,
-                'user': {
-                    'email': user.email,
-                    'first_name': user.first_name,
-                    'last_name': user.last_name,
-                    'is_verified': user.is_verified
-                }
+                "email" : user.email,
+                "address" : user.address,
+                "category" : user.category,
+                "first_name" : user.first_name,
+                "last_name" : user.last_name,
+                "mobile_number" : user.mobile_number,
+                'profile_picture': user.profile_picture.url if user.profile_picture else None,  # Handle None for profile_picture
+                'token': token.key
+
             })
         
         except ValueError:
