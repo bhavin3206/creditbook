@@ -1,45 +1,44 @@
 from rest_framework import serializers
-from  datetime import datetime
-from datetime import timedelta
+from datetime import  date
 from .models import User, Customer, Transaction, PaymentReminder
-from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from rest_framework.authtoken.models import Token
-from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 import re
-from datetime import date
+
 # ---------------------------- Signup Serializer ----------------------------
 class SignupSerializer(serializers.ModelSerializer):
-    mobile_number = serializers.CharField(required=True)  # Required mobile number
-    email = serializers.EmailField(required=False)  # Email is optional
-    # password = serializers.CharField(write_only=True, required=True)  # Password is required
-
+    mobile_number = serializers.CharField(required=True)
+    email = serializers.EmailField(required=False)
     password = serializers.CharField(max_length=100, required=True, style={'input_type': 'password'}, write_only=True)
-    # address = serializers.CharField(max_length=255, required=False, allow_blank=True)
 
     class Meta:
         model = User
         fields = ['first_name', 'last_name', 'mobile_number', 'email', 'password', 'address']
 
     def validate(self, attrs):
-        errors = {}
-
         mobile_number = attrs.get('mobile_number', '')
         email = attrs.get('email', '')
         password = attrs.get('password', '')
+        
         if User.objects.filter(mobile_number__iexact=mobile_number).exists():
             raise serializers.ValidationError('Mobile number already exists! Please try another one.')
-        if User.objects.filter(email__iexact=email).exists():
+        
+        if email and User.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError('Email already exists! Please try another one.')
-        if "@gmail.com" not in email:
+        
+        if email and "@gmail.com" not in email:
             raise serializers.ValidationError('Please enter a valid Gmail email address.')
+        
         if len(password) < 8:  
             raise serializers.ValidationError({"password":"Password must be at least 8 characters long."})
+        
         if not re.search(r'[A-Z]', password):
             raise serializers.ValidationError({"password":"Password must contain at least one uppercase letter."})
+        
         if not re.search(r'[a-z]', password):
             raise serializers.ValidationError({"password":"Password must contain at least one lowercase letter."})
+        
         if not re.search(r'[0-9]', password):
             raise serializers.ValidationError({"password":"Password must contain at least one digit."})
+        
         if not re.search(r'[!@#$%^&*]', password):
             raise serializers.ValidationError({"password":"Password must contain at least one special character: !@#$%^&*"})
 
@@ -64,25 +63,21 @@ class SignupSerializer(serializers.ModelSerializer):
 # ---------------------------- User Edit Serializer ----------------------------
 class UserSerializer(serializers.ModelSerializer):
     mobile_number = serializers.CharField(required=False)
+    category_id = serializers.IntegerField(source='category.id', required=False, allow_null=True)
 
     class Meta:
         model = User
         fields = [
-            'email', 'address', 'category', 'first_name', 'last_name', 
+            'email', 'address', 'category_id', 'first_name', 'last_name', 
             'mobile_number', 'profile_picture'
         ]
-
         read_only_fields = ['password', 'is_approved', 'is_verified', 'is_active', 'is_owner', 'is_staff']
-
-    
-
 
 # ---------------------------- Customer Serializer ----------------------------
 class CustomerSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Customer
-        fields = ['id','name', 'contact_number', 'email', 'address', 'account_balance', 'created_at', 'updated_at']  # Define the fields you want to allow
+        fields = ['id', 'name', 'contact_number', 'email', 'address', 'account_balance', 'created_at', 'updated_at']
         extra_kwargs = {
             "email": {"required": False},
             "address": {"required": False},
@@ -104,13 +99,25 @@ class CustomerSerializer(serializers.ModelSerializer):
 
         return attrs
 
+# ---------------------------- Simple Customer Serializer ----------------------------
+# For optimized nested relationships
+class SimpleCustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = ['id', 'name', 'account_balance']
+
 # ---------------------------- Transaction Serializer ----------------------------
 class TransactionSerializer(serializers.ModelSerializer):
+    # Optimize nested serialization by using a minimal customer representation
+    customer_details = SimpleCustomerSerializer(source='customer', read_only=True)
+    
     class Meta:
         model = Transaction
-        fields = "__all__"
-        # exclude = ('updated_at',)  # Excludes these fields
-
+        fields = [
+            'id', 'customer', 'customer_details', 'amount', 'transaction_type', 
+            'payment_mode', 'date', 'description', 'bill_image', 'created_at'
+        ]
+    
     def create(self, validated_data):
         """
         Add ownership validation for creating a transaction.
@@ -122,7 +129,7 @@ class TransactionSerializer(serializers.ModelSerializer):
         if customer.user != user:  # Ensure the customer belongs to the authenticated user
             raise serializers.ValidationError("You cannot create a transaction for another user's customer.")
         
-        transaction = super().create(validated_data)  # Save the transaction
+        transaction = super().create(validated_data)
         return transaction
 
     def validate(self, attrs):
@@ -137,16 +144,29 @@ class TransactionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Not Found.")
         return attrs
 
+# ---------------------------- Simple Transaction Serializer ----------------------------
+# For optimized nested relationships
+class SimpleTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ['id', 'amount', 'transaction_type', 'date']
 
 # ---------------------------- Payment Reminder Serializer ----------------------------
 class PaymentReminderSerializer(serializers.ModelSerializer):
+    # Optimize nested serialization
+    customer_details = SimpleCustomerSerializer(source='customer', read_only=True)
+    transaction_details = SimpleTransactionSerializer(source='transaction', read_only=True)
+    
     class Meta:
         model = PaymentReminder
-        exclude = ('updated_at',)  # Excludes these fields
+        fields = [
+            'id', 'customer', 'customer_details', 'transaction', 'transaction_details',
+            'amount_due', 'reminder_date', 'status', 'created_at'
+        ]
         extra_kwargs = {
             "status": {"required": False},  
-            "customer": {"required": False, "allow_null": True},  
-            "transaction": {"required": False, "allow_null": True}  
+            "customer": {"required": False, "allow_null": True, "write_only": True},  
+            "transaction": {"required": False, "allow_null": True, "write_only": True}  
         }
 
     def validate(self, attrs):

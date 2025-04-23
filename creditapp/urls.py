@@ -8,8 +8,8 @@ urlpatterns = [
     path('signup/', SignupView, name='signup'),
     path('signin/', user_login, name='signin'),
     path('logout/', user_logout, name='logout'),
-    path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path('edit/', UserEditAPIView.as_view(), name='user-edit'),
+    # path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
 
     # social login 
     path('auth/google/', GoogleLoginView.as_view(), name='google_login'),

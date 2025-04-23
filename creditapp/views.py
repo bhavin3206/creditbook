@@ -1,45 +1,55 @@
 from .models import *
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
-from rest_framework import filters, generics, status
+from rest_framework import filters, generics, status, pagination
 from rest_framework.response import Response
-from rest_framework.exceptions import NotFound
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import  IsAuthenticated
 from rest_framework.authtoken.models import Token
-from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import *
 from rest_framework.generics import UpdateAPIView
-from django.shortcuts import get_object_or_404, get_list_or_404
+from django.shortcuts import get_object_or_404
 from django.http import Http404
 from datetime import date
-from django.contrib.auth import get_user_model
+from django.db.models import  Q
 from rest_framework.views import APIView
-from google.oauth2 import id_token
-from google.auth.transport import requests
-import os
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Custom pagination class
+class StandardResultsSetPagination(pagination.PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 #-----------------------------signup /signin view with google --------
 
 class GoogleLoginView(APIView):
     def post(self, request):
         # Get token from request
-        token = request.data.get('id_token')
+        access_token = request.data.get("access_token")
+        if not access_token:
+            return Response({"error": "Access token required"}, status=400)
+        
         
         try:
             # Verify token with Google
-            google_client_id = os.environ.get('CLIENT_ID')
-            idinfo = id_token.verify_oauth2_token(token, requests.Request(), google_client_id)
+            idinfo = requests.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            ).json()  
+
             email = idinfo.get('email')
         
-            # Check if user exists
+            # Check if user exists - using only required fields
             user = None
             try:
+                # Only fetch fields we need
                 user = User.objects.get(email=email)
             except User.DoesNotExist:
-                # Create a new user
+                # Create a new user with minimal fields
                 user = User.objects.create_user(
                     email=email,
                     first_name=idinfo.get('given_name'),
@@ -51,16 +61,16 @@ class GoogleLoginView(APIView):
             # This depends on your auth solution (JWT, token, etc.)
             token, _ = Token.objects.get_or_create(user=user)
 
+            # Only return necessary fields
             return Response({
-                "email" : user.email,
-                "address" : user.address,
-                "category" : user.category,
-                "first_name" : user.first_name,
-                "last_name" : user.last_name,
-                "mobile_number" : user.mobile_number,
-                'profile_picture': user.profile_picture.url if user.profile_picture else None,  # Handle None for profile_picture
+                "email": user.email,
+                "address": user.address,
+                "category": user.category_id,  # Return ID instead of full object
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "mobile_number": user.mobile_number,
+                'profile_picture': user.profile_picture.url if user.profile_picture else None,
                 'token': token.key
-
             })
         
         except ValueError:
@@ -74,14 +84,14 @@ def SignupView(request):
         try:
             if serializer.is_valid(raise_exception=True):
                 user = serializer.save()
-                return Response({"message": "User  created successfully."}, status=status.HTTP_201_CREATED)
+                return Response({"message": "User created successfully."}, status=status.HTTP_201_CREATED)
         except serializers.ValidationError as e:
             response = str(next(iter(e.detail.values())))
             if "This field is required." in response: 
                 response = str(next(iter(e.detail.keys()))) + " field is required"
-                return Response({"message":response}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"message": response}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({"message":str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
 
 # ---------------------------- Signin View ----------------------------
 @api_view(['POST'])
@@ -96,27 +106,34 @@ def user_login(request):
             return Response({'message': 'password field required'}, status=status.HTTP_400_BAD_REQUEST)
 
         user = None
+        # Use select_related for category to avoid additional query
         if '@' in username:
             try:
-                user = User.objects.get(email=username)
+                user = User.objects.select_related('category').get(email=username)
             except ObjectDoesNotExist:
                 pass
 
         if not user:
             user = authenticate(username=username, password=password)
+            if user:
+                # Fetch the category relationship to avoid an extra query later
+                user = User.objects.select_related('category').get(pk=user.pk)
 
         if user:
+            # Use delete() with filter for efficiency
             Token.objects.filter(user=user).delete()
             
             token, _ = Token.objects.get_or_create(user=user)
+            
+            # Only return necessary data
             data = {
-                "email" : user.email,
-                "address" : user.address,
-                "category" : user.category,
-                "first_name" : user.first_name,
-                "last_name" : user.last_name,
-                "mobile_number" : user.mobile_number,
-                'profile_picture': user.profile_picture.url if user.profile_picture else None,  # Handle None for profile_picture
+                "email": user.email,
+                "address": user.address,
+                "category": user.category_id,  # Return ID instead of object
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "mobile_number": user.mobile_number,
+                'profile_picture': user.profile_picture.url if user.profile_picture else None,
                 'token': token.key
             }
             return Response(data, status=status.HTTP_200_OK)
@@ -126,23 +143,22 @@ def user_login(request):
 # ---------------------------- User Edit View ----------------------------
 class UserEditAPIView(UpdateAPIView):
     serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]  # Ensure the user is authenticated to edit
+    permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        return self.request.user  # Assumes you're updating the currently authenticated user
+        # Use select_related to get related fields in one query
+        return User.objects.select_related('category').get(pk=self.request.user.pk)
 
     def update(self, request, *args, **kwargs):
         # Overriding to perform any extra actions before updating
         user = self.get_object()
 
         # Ensure the user is editing their own details
-        if user != request.user :
+        if user.pk != request.user.pk:
             return Response({"message": "Not Found."}, status=status.HTTP_403_FORBIDDEN)
 
         # Proceed with update
         return super().update(request, *args, **kwargs)
-
-
 
 # ---------------------------- Logout View ----------------------------
 @api_view(['POST'])
@@ -150,24 +166,11 @@ class UserEditAPIView(UpdateAPIView):
 def user_logout(request):
     if request.method == 'POST':
         try:
-            # Delete the user's token to logout
-            request.user.auth_token.delete()
+            # Delete the user's token to logout - no need to retrieve it first
+            Token.objects.filter(user=request.user).delete()
             return Response({'message': 'Successfully logged out.'}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-#----------------------------- Refresh Token View ----------------------------
-class CustomTokenRefreshView(TokenRefreshView):
-    """
-    Custom Token Refresh API to provide a new access token
-    using a valid refresh token.
-    """
-    def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        return Response(
-            {"access_token": response.data["access"]}, 
-            status=status.HTTP_200_OK
-        )
 
 
 # ---------------------------- Customer Views ----------------------------
@@ -177,12 +180,17 @@ class CustomerListCreateView(generics.ListCreateAPIView):
     """
     permission_classes = [IsAuthenticated]
     serializer_class = CustomerSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         """
         Only return customers belonging to the authenticated user.
         """
-        return Customer.objects.filter(user=self.request.user)
+        # Use only() to select specific fields
+        return Customer.objects.filter(user=self.request.user).only(
+            'id', 'name', 'contact_number', 'email', 'address', 'account_balance', 
+            'created_at', 'updated_at'
+        )
     
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -212,7 +220,6 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
         """
         return Customer.objects.filter(user=self.request.user)
 
-
 # ---------------------------- Delete Customer Views ----------------------------
 class DeleteCustomerView(generics.DestroyAPIView):
     """
@@ -229,19 +236,20 @@ class DeleteCustomerView(generics.DestroyAPIView):
         try:
             customer_id = self.kwargs.get("pk")
             customer = get_object_or_404(Customer, id=customer_id, user=self.request.user)
+            # Store name before deletion for message
+            customer_name = customer.name
             self.perform_destroy(customer)
-            return Response({"message": f"Customer '{customer.name}' deleted successfully!"}, status=status.HTTP_200_OK)
-        except Http404:  # Catch customer not found
+            return Response({"message": f"Customer '{customer_name}' deleted successfully!"}, status=status.HTTP_200_OK)
+        except Http404:
             return Response({"message": "Customer not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"message": "An error occurred while deleting the customer."}, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 # ---------------------------- Customer Transaction Views ----------------------------
 class CustomerTransactionsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = TransactionSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         """
@@ -251,18 +259,28 @@ class CustomerTransactionsView(generics.ListAPIView):
         user = self.request.user
 
         try:
-            customer = get_object_or_404(Customer, id=customer_id, user=user)
+            # First verify the customer belongs to user (lightweight query)
+            customer = get_object_or_404(Customer.objects.only('id', 'user_id'), id=customer_id, user=user)
         except Http404:
-            raise Http404("Customer not found.")  # Custom error message
+            raise Http404("Customer not found.")
 
-        return Transaction.objects.filter(customer=customer)
+        # Only select fields that are needed in the serializer response
+        return Transaction.objects.filter(customer=customer).only(
+            'id', 'customer_id', 'amount', 'transaction_type', 'payment_mode', 
+            'date', 'description', 'created_at'
+        ).select_related('customer')  # Optimize related customer lookups
 
     def list(self, request, *args, **kwargs):
         """
         Override list method to return a custom error response instead of Django's default 404.
         """
         try:
-            queryset = self.get_queryset()
+            queryset = self.filter_queryset(self.get_queryset())
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+                
             serializer = self.get_serializer(queryset, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Http404 as e:
@@ -276,6 +294,7 @@ class TransactionListCreateView(generics.ListCreateAPIView):
     ordering_fields = ['date', 'amount']
     ordering = ['-created_at']
     search_fields = ['customer__name', 'description']
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         """
@@ -284,6 +303,7 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         """
         user = self.request.user
         queryset = Transaction.objects.filter(customer__user=user)
+        
         # Get filter parameters
         customer_name = self.request.query_params.get('customer_name')
         customer_id = self.request.query_params.get('customer_id')
@@ -293,47 +313,55 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         specific_date = self.request.query_params.get('specific_date')
         amount = self.request.query_params.get('amount')
         description_keyword = self.request.query_params.get('description')
-        payment_mode = self.request.query_params.get('payment_mode')  # New filter
+        payment_mode = self.request.query_params.get('payment_mode')
 
-        today = date.today()
+        # Build filters incrementally to prevent unnecessary query complexity
+        filters = Q()
 
         # Filter by customer name (case-insensitive)
         if customer_name:
-            queryset = queryset.filter(customer__name__icontains=customer_name)
+            filters &= Q(customer__name__icontains=customer_name)
 
         # Filter by customer ID
         if customer_id:
-            queryset = queryset.filter(customer__id=customer_id)
+            filters &= Q(customer__id=customer_id)
 
         # Filter by transaction type (credit/debit)
         if transaction_type:
-            queryset = queryset.filter(transaction_type=transaction_type)
+            filters &= Q(transaction_type=transaction_type)
 
         # Filter by specific date
         if specific_date:
-            queryset = queryset.filter(date=specific_date)
+            filters &= Q(date=specific_date)
 
         # Filter by date range
         if start_date and end_date:
-            queryset = queryset.filter(date__range=[start_date, end_date])
+            filters &= Q(date__range=[start_date, end_date])
 
         # Filter by payment mode
         if payment_mode:
-            queryset = queryset.filter(payment_mode=payment_mode)
+            filters &= Q(payment_mode=payment_mode)
 
         # Filter by amount
         if amount:
-            queryset = queryset.filter(amount=amount)
+            filters &= Q(amount=amount)
 
         # Filter by description keyword
         if description_keyword:
-            queryset = queryset.filter(description__icontains=description_keyword)
+            filters &= Q(description__icontains=description_keyword)
 
-        return queryset
+        # Apply all filters at once
+        if filters:
+            queryset = queryset.filter(filters)
+
+        # Select only needed fields for optimization
+        return queryset.select_related('customer').only(
+            'id', 'customer_id', 'amount', 'transaction_type', 'payment_mode',
+            'date', 'description', 'created_at', 'customer__name'
+        )
 
     def perform_create(self, serializer):
-        transaction = serializer.save()
-
+        serializer.save()
 
 # ---------------------------- Transaction Views ----------------------------
 class TransactionDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -344,7 +372,7 @@ class TransactionDetailView(generics.RetrieveUpdateDestroyAPIView):
         """
         Only allow retrieving transactions belonging to the authenticated user.
         """
-        return Transaction.objects.filter(customer__user=self.request.user)
+        return Transaction.objects.filter(customer__user=self.request.user).select_related('customer')
 
 #----------------------------- Transaction Delete Views ---------------------
 class TransactionDeleteView(generics.DestroyAPIView):
@@ -369,29 +397,37 @@ class TransactionDeleteView(generics.DestroyAPIView):
 class PaymentReminderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PaymentReminderSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         """
         Return payment reminders for customers or transactions 
         belonging to the authenticated user.
         """
-        # return PaymentReminder.objects.filter(
-        #     models.Q(customer__user=self.request.user) | 
-        #     models.Q(transaction__customer__user=self.request.user)
-        # )
         user = self.request.user
-        queryset = PaymentReminder.objects.filter(customer__user=self.request.user)
+        queryset = PaymentReminder.objects.filter(customer__user=user)
+        
+        # Use select_related for better query performance
+        queryset = queryset.select_related('customer', 'transaction')
+        
+        # Only select needed fields
+        queryset = queryset.only(
+            'id', 'customer_id', 'transaction_id', 'amount_due', 
+            'reminder_date', 'status', 'created_at',
+            'customer__name', 'transaction__amount', 'transaction__date',
+            'transaction__transaction_type'
+        )
 
+        payment_status = self.request.query_params.get('payment_status')
         today = date.today()
 
-        payment_status = self.request.query_params.get('payment_status')  # New filter
-
+        # Apply filters as needed
         if payment_status == "overdue":
-            queryset = queryset.filter(reminder_date__lt=today, status="pending").distinct()
+            queryset = queryset.filter(reminder_date__lt=today, status="pending")
         elif payment_status == "upcoming":
-            queryset = queryset.filter(reminder_date__gt=today, status="pending").distinct()
+            queryset = queryset.filter(reminder_date__gt=today, status="pending")
         elif payment_status == "due_today":
-            queryset = queryset.filter(reminder_date=today, status="pending").distinct()
+            queryset = queryset.filter(reminder_date=today, status="pending")
 
         return queryset
     
@@ -400,8 +436,6 @@ class PaymentReminderListCreateView(generics.ListCreateAPIView):
         Create a reminder after validation in the serializer.
         """
         serializer.save()
-
-
 
 class PaymentReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
@@ -412,6 +446,6 @@ class PaymentReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
         Return only reminders that belong to the authenticated user's customers or transactions.
         """
         return PaymentReminder.objects.filter(
-            models.Q(customer__user=self.request.user) | 
-            models.Q(transaction__customer__user=self.request.user)
-        )
+            Q(customer__user=self.request.user) | 
+            Q(transaction__customer__user=self.request.user)
+        ).select_related('customer', 'transaction')
