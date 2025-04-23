@@ -47,8 +47,6 @@ INSTALLED_APPS = [
     "rest_framework_api_key",
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',  # Required for blacklisting tokens
-
-
 ]
 
 MIDDLEWARE = [
@@ -59,42 +57,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    # 'allauth.account.auth_backends.AuthenticationBackend',
     # 'creditapp.middleware.BlockBlacklistedTokenMiddleware',  # Custom middleware to block blacklisted tokens
 ]
 
 
-
-
-
-# SIMPLE_JWT = {
-#     'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
-#     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
-#     'ROTATE_REFRESH_TOKENS': False,
-#     'BLACKLIST_AFTER_ROTATION': True,
-#     "UPDATE_LAST_LOGIN": True,
-
-#     'ALGORITHM': 'HS256',
-#     'SIGNING_KEY': SECRET_KEY+'1',
-#     'VERIFYING_KEY': None,
-#     'AUDIENCE': None,
-#     'ISSUER': None,
-
-#     'AUTH_HEADER_TYPES': ('Bearer',),
-#     'USER_ID_FIELD': 'id',
-#     'USER_ID_CLAIM': 'user_id',
-
-#     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken", "rest_framework_simplejwt.tokens.RefreshToken"),
-#     'TOKEN_TYPE_CLAIM': 'token_type',
-
-#     'JTI_CLAIM': 'jti',
-
-#     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
-#     'SLIDING_TOKEN_LIFETIME': timedelta(days=1),
-#     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
-# }
-
-
-# ROOT_URLCONF = 'urls'
 
 ROOT_URLCONF = 'app.urls'
 
@@ -192,6 +160,29 @@ REST_FRAMEWORK = {
     ),
 }
 
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+
+# SITE_ID = 1
+
+# SOCIALACCOUNT_ADAPTER = 'creditapp.adapters.CustomSocialAccountAdapter'
+
+
+# SOCIALACCOUNT_PROVIDERS = {
+#     'google': {
+#         'APP': {
+#             'client_id': os.environ['CLIENT_ID'], 
+#             'secret': os.environ['CLIENT_SECRET'],
+#             'key': ''
+#         },
+#         'SCOPE': ['profile', 'email'],
+#         'AUTH_PARAMS': {'access_type': 'online'}
+#     }
+# }
+
+
 # Redis as Celery Broker
 # CELERY_BROKER_URL = "redis://172.20.80.1:6379/0"
 # CELERY_BROKER_URL = "redis://127.0.0.1:6379/1"
@@ -238,3 +229,4 @@ REST_FRAMEWORK = {
 #         },
 #     },
 # }
+

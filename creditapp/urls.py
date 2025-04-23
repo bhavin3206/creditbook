@@ -1,7 +1,6 @@
 from django.urls import path
 from django.conf.urls.static import static
 from django.conf import settings
-
 from .views import *
 
 urlpatterns = [
@@ -12,6 +11,8 @@ urlpatterns = [
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path('edit/', UserEditAPIView.as_view(), name='user-edit'),
 
+    # social login 
+    path('auth/google/', GoogleLoginView.as_view(), name='google_login'),
 
     # Customer URLs
     path('customers/', CustomerListCreateView.as_view(), name='customer-list-create'),

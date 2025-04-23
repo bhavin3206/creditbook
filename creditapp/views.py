@@ -13,6 +13,56 @@ from rest_framework.generics import UpdateAPIView
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.http import Http404
 from datetime import date
+from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
+from google.oauth2 import id_token
+from google.auth.transport import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+#-----------------------------signup /signin view with google --------
+
+class GoogleLoginView(APIView):
+    def post(self, request):
+        # Get token from request
+        token = request.data.get('id_token')
+        
+        try:
+            # Verify token with Google
+            google_client_id = os.environ.get('CLIENT_ID')
+            idinfo = id_token.verify_oauth2_token(token, requests.Request(), google_client_id)
+            email = idinfo.get('email')
+        
+            # Check if user exists
+            user = None
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                # Create a new user
+                user = User.objects.create_user(
+                    email=email,
+                    first_name=idinfo.get('given_name'),
+                    last_name=idinfo.get('family_name')
+                )
+                user.is_verified = True
+                user.save()
+            
+            # This depends on your auth solution (JWT, token, etc.)
+            token, _ = Token.objects.get_or_create(user=user)
+            
+            return Response({
+                'token': token.key,
+                'user': {
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'is_verified': user.is_verified
+                }
+            })
+        
+        except ValueError:
+            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
 # ---------------------------- Signup View ----------------------------
 @api_view(['POST'])
@@ -232,7 +282,6 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         """
         user = self.request.user
         queryset = Transaction.objects.filter(customer__user=user)
-        # breakpoint()
         # Get filter parameters
         customer_name = self.request.query_params.get('customer_name')
         customer_id = self.request.query_params.get('customer_id')
@@ -242,7 +291,7 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         specific_date = self.request.query_params.get('specific_date')
         amount = self.request.query_params.get('amount')
         description_keyword = self.request.query_params.get('description')
-        payment_status = self.request.query_params.get('payment_status')  # New filter
+        payment_mode = self.request.query_params.get('payment_mode')  # New filter
 
         today = date.today()
 
@@ -266,6 +315,10 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         if start_date and end_date:
             queryset = queryset.filter(date__range=[start_date, end_date])
 
+        # Filter by payment mode
+        if payment_mode:
+            queryset = queryset.filter(payment_mode=payment_mode)
+
         # Filter by amount
         if amount:
             queryset = queryset.filter(amount=amount)
@@ -273,14 +326,6 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         # Filter by description keyword
         if description_keyword:
             queryset = queryset.filter(description__icontains=description_keyword)
-
-        # Filter transactions based on associated PaymentReminder due status
-        if payment_status == "overdue":
-            queryset = queryset.filter(reminders__reminder_date__lt=today, reminders__status="pending").distinct()
-        elif payment_status == "upcoming":
-            queryset = queryset.filter(reminders__reminder_date__gt=today, reminders__status="pending").distinct()
-        elif payment_status == "due_today":
-            queryset = queryset.filter(reminders__reminder_date=today, reminders__status="pending").distinct()
 
         return queryset
 
@@ -328,10 +373,25 @@ class PaymentReminderListCreateView(generics.ListCreateAPIView):
         Return payment reminders for customers or transactions 
         belonging to the authenticated user.
         """
-        return PaymentReminder.objects.filter(
-            models.Q(customer__user=self.request.user) | 
-            models.Q(transaction__customer__user=self.request.user)
-        )
+        # return PaymentReminder.objects.filter(
+        #     models.Q(customer__user=self.request.user) | 
+        #     models.Q(transaction__customer__user=self.request.user)
+        # )
+        user = self.request.user
+        queryset = PaymentReminder.objects.filter(customer__user=self.request.user)
+
+        today = date.today()
+
+        payment_status = self.request.query_params.get('payment_status')  # New filter
+
+        if payment_status == "overdue":
+            queryset = queryset.filter(reminder_date__lt=today, status="pending").distinct()
+        elif payment_status == "upcoming":
+            queryset = queryset.filter(reminder_date__gt=today, status="pending").distinct()
+        elif payment_status == "due_today":
+            queryset = queryset.filter(reminder_date=today, status="pending").distinct()
+
+        return queryset
     
     def perform_create(self, serializer):
         """

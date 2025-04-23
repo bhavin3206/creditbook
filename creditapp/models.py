@@ -10,20 +10,20 @@ from django.db.models import F
 
 # Custom User Manager
 class UserManager(BaseUserManager):
-    def create_user(self, mobile_number, password=None):
-        if not mobile_number:
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
             raise ValueError("User must have a mobile number")
 
-        user = self.model(mobile_number=mobile_number)
+        user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save()
         return user
 
-    def create_superuser(self, mobile_number, password):
+    def create_superuser(self, email, password):
         if not password:
             raise ValueError("Superuser must have a password")
 
-        user = self.create_user(mobile_number, password)
+        user = self.create_user(email, password)
         user.is_superuser = True
         user.is_staff = True
         user.is_verified = True
@@ -33,7 +33,6 @@ class UserManager(BaseUserManager):
 
 # User Model
 class User(AbstractBaseUser, PermissionsMixin):
-
     email = models.EmailField(max_length=50, unique=True, null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True)
@@ -118,10 +117,22 @@ class Transaction(models.Model):
         ("debit", "Debit"),
     ]
 
+    PAYMENT_MODE_CHOICES = [
+        ("cash", "Cash"),
+        ("gpay", "G-pay"),
+        ("phonepe", "Phonepe"),
+        ("imps", "IMPS"),
+        ("neft", "NEFT"),
+        ("rtgs", "RTGS"),
+        ("debit-card", "Debit Card"),
+        ("credit-card", "Credit Card"),
+    ]
+
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="transactions")
     customer_name = models.CharField(max_length=255, blank=True, null=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPES)
+    payment_mode = models.CharField(max_length=11, choices=PAYMENT_MODE_CHOICES, default='cash')
     date = models.DateField()
     description = models.TextField(blank=True, null=True)
     bill_image = models.ImageField(upload_to=transaction_bill_upload_path, blank=True, null=True)
@@ -149,6 +160,7 @@ class PaymentReminder(models.Model):
         ("pending", "Pending"),
         ("paid", "Paid"),
     ]
+
 
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="payment_reminders", null=True, blank=True)
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name="reminders", null=True, blank=True)
