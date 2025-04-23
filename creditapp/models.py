@@ -10,11 +10,15 @@ from django.db.models import F
 
 # Custom User Manager
 class UserManager(BaseUserManager):
-    def create_user(self, email, password=None, **extra_fields):
-        if not email:
-            raise ValueError("User must have a mobile number")
-
-        user = self.model(email=email, **extra_fields)
+    def create_user(self, email=None , mobile_number=None, password=None, **extra_fields):
+        if not email and not mobile_number:
+            raise ValueError("User must have a mobile number or email")
+        if email and not mobile_number:
+            user = self.model(email=email, **extra_fields)
+        if mobile_number and not email:
+            user = self.model(mobile_number=mobile_number, **extra_fields)
+        if mobile_number and email:
+            user = self.model(email=email, mobile_number=mobile_number, **extra_fields)
         user.set_password(password)
         user.save()
         return user
@@ -33,13 +37,13 @@ class UserManager(BaseUserManager):
 
 # User Model
 class User(AbstractBaseUser, PermissionsMixin):
-    email = models.EmailField(max_length=50, unique=True, null=True, blank=True)
+    email = models.EmailField(max_length=50, unique=True, null=True, blank=True,  db_index=True)
+    mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True, db_index=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True)
     customer = models.ForeignKey('Customer', on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     first_name = models.CharField(max_length=100, null=True, blank=True)
     last_name = models.CharField(max_length=100, null=True, blank=True)
-    mobile_number = models.CharField(max_length=15, unique=True, db_index=True)
     profile_picture = models.ImageField(upload_to="profile_pictures/", default="default_profile/avatar_blank.jpg")
     
     is_approved = models.BooleanField(default=False)
