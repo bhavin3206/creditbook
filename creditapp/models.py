@@ -27,7 +27,7 @@ class UserManager(BaseUserManager):
         if not password:
             raise ValueError("Superuser must have a password")
                 
-        user = self.create_user(password, mobile_number=mobile_number, email=email)
+        user = self.create_user(email=email, mobile_number=mobile_number, password=password)
         user.is_superuser = True
         user.is_staff = True
         user.is_verified = True
