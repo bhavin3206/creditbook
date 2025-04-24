@@ -65,7 +65,7 @@ class GoogleLoginView(APIView):
             return Response({
                 "email": user.email,
                 "address": user.address,
-                "category": user.category_id,  # Return ID instead of full object
+                "category": user.category,  # Return ID instead of full object
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "mobile_number": user.mobile_number,
@@ -109,7 +109,7 @@ def user_login(request):
         # Use select_related for category to avoid additional query
         if '@' in username:
             try:
-                user = User.objects.select_related('category').get(email=username)
+                user = User.objects.get(email=username)
             except ObjectDoesNotExist:
                 pass
 
@@ -117,7 +117,7 @@ def user_login(request):
             user = authenticate(username=username, password=password)
             if user:
                 # Fetch the category relationship to avoid an extra query later
-                user = User.objects.select_related('category').get(pk=user.pk)
+                user = User.objects.get(pk=user.pk)
 
         if user:
             # Use delete() with filter for efficiency
@@ -129,7 +129,7 @@ def user_login(request):
             data = {
                 "email": user.email,
                 "address": user.address,
-                "category": user.category_id,  # Return ID instead of object
+                "category": user.category,  # Return ID instead of object
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "mobile_number": user.mobile_number,
@@ -147,7 +147,7 @@ class UserEditAPIView(UpdateAPIView):
 
     def get_object(self):
         # Use select_related to get related fields in one query
-        return User.objects.select_related('category').get(pk=self.request.user.pk)
+        return User.objects.get(pk=self.request.user.pk)
 
     def update(self, request, *args, **kwargs):
         # Overriding to perform any extra actions before updating
@@ -159,6 +159,25 @@ class UserEditAPIView(UpdateAPIView):
 
         # Proceed with update
         return super().update(request, *args, **kwargs)
+    
+# --------------------------- get user profile -------------------------
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_profile(request):
+    user = request.user
+    token = Token.objects.get(user=user).key  # Get the token
+
+    return Response({
+        "email": user.email,
+        "address": user.address,
+        "category": user.category,  # Return ID instead of object
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "mobile_number": user.mobile_number,
+        'profile_picture': user.profile_picture.url if user.profile_picture else None,
+        'token': token
+    })
+
 
 # ---------------------------- Logout View ----------------------------
 @api_view(['POST'])

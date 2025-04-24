@@ -91,13 +91,43 @@ WSGI_APPLICATION = 'app.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'ATOMIC_REQUESTS': True,  # <--- Add this
+# By default
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#         'ATOMIC_REQUESTS': True,  # <--- Add this
+#     }
+# }
+DJANGO_ENV = os.environ.get('DJANGO_ENV', 'prod')
+
+if DJANGO_ENV == 'dev':
+    # Development: Use PostgreSQL (with pgAdmin as your admin interface)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('PG_DB_NAME', 'ok_credit'),
+            'USER': os.environ.get('PG_USER', 'postgres'),
+            'PASSWORD': os.environ.get('PG_PASSWORD', '0000'),
+            'HOST': os.environ.get('PG_HOST', 'localhost'),  # For local pgAdmin
+            'PORT': os.environ.get('PG_PORT', '5432'),  # Default PostgreSQL port
+        }
     }
-}
+elif DJANGO_ENV == 'prod':
+    # Production: Use MySQL (on PythonAnywhere)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.environ.get('MYSQL_DB_NAME', 'bhavincreditbook$default'),
+            'USER': os.environ.get('MYSQL_USER', 'bhavincreditbook'),
+            'PASSWORD': os.environ.get('MYSQL_PASSWORD', 'Bhavin@123'),
+            'HOST': os.environ.get('MYSQL_HOST', 'bhavincreditbook.mysql.pythonanywhere-services.com'),
+            'PORT': os.environ.get('MYSQL_PORT', '3306'),  # Default MySQL port
+        }
+    }
+else:
+    raise ValueError("Invalid DJANGO_ENV setting. Must be 'dev' or 'prod'.")
+
 
 
 

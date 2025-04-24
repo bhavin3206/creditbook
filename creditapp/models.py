@@ -41,7 +41,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(max_length=50, unique=True, null=True, blank=True, db_index=True)
     mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True, db_index=True)
     address = models.CharField(max_length=255, null=True, blank=True)
-    category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True)
+    category = models.CharField(max_length=50, default="Other")  # CharField for category
     customer = models.ForeignKey('Customer', on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     first_name = models.CharField(max_length=100, null=True, blank=True)
     last_name = models.CharField(max_length=100, null=True, blank=True)
@@ -73,16 +73,6 @@ def get_file_path(instance, filename):
     ext = filename.split('.')[-1]
     filename = f"bill_{uuid.uuid4()}.{ext}"
     return os.path.join('uploads/', filename)
-
-# Category Model
-class Category(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name_plural = "Categories"
 
 # Customer Model
 class Customer(models.Model):

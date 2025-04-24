@@ -63,12 +63,12 @@ class SignupSerializer(serializers.ModelSerializer):
 # ---------------------------- User Edit Serializer ----------------------------
 class UserSerializer(serializers.ModelSerializer):
     mobile_number = serializers.CharField(required=False)
-    category_id = serializers.IntegerField(source='category.id', required=False, allow_null=True)
+    category = serializers.CharField(required=False)
 
     class Meta:
         model = User
         fields = [
-            'email', 'address', 'category_id', 'first_name', 'last_name', 
+            'email', 'address', 'category', 'first_name', 'last_name', 
             'mobile_number', 'profile_picture'
         ]
         read_only_fields = ['password', 'is_approved', 'is_verified', 'is_active', 'is_owner', 'is_staff']

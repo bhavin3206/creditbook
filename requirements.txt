@@ -5,4 +5,5 @@ django-celery-results
 djangorestframework
 djangorestframework-api-key
 djangorestframework-simplejwt
+psycopg2-binary
 
