@@ -110,16 +110,16 @@ elif DJANGO_ENV == 'prod':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': os.environ.get('MYSQL_DB_NAME', 'bhavincreditbook$default'),
-            'USER': os.environ.get('MYSQL_USER', 'bhavincreditbook'),
-            'PASSWORD': os.environ.get('MYSQL_PASSWORD', 'Bhavin@123'),
-            'HOST': os.environ.get('MYSQL_HOST', 'bhavincreditbook.mysql.pythonanywhere-services.com'),
-            'PORT': os.environ.get('MYSQL_PORT', '3306'),  # Default MySQL port
+            'NAME': 'bhavincreditbook$default',
+            'USER': 'bhavincreditbook',
+            'PASSWORD': 'Bhavin@123',
+            'HOST': 'bhavincreditbook.mysql.pythonanywhere-services.com',
+            'PORT': '3306',
             'OPTIONS': {
                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             },
         }
-    }
+}
 else:
     DATABASES = {
     'default': {

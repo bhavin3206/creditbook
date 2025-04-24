@@ -1,14 +1,21 @@
+from datetime import datetime, timedelta
 import asyncio
 import random
-from datetime import datetime, timedelta
-
+import os
 import httpx
 from faker import Faker
+from dotenv import load_dotenv
+
+load_dotenv()
 
 fake = Faker()
 
 # === CONFIGURATION ===
-API_BASE = "http://127.0.0.1:8000/api"
+if os.environ.get('DJANGO_ENV') == 'prod':
+    API_BASE = "https://bhavincreditbook.pythonanywhere.com/api"
+else:
+    API_BASE = "http://127.0.0.1:8000/api"
+
 CUSTOMER_COUNT = 20
 MAX_TRANSACTIONS_PER_CUSTOMER = 10
 OWNER_USER_ID = 1  # Replace with your actual user ID
