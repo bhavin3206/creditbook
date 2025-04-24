@@ -11,15 +11,15 @@ load_dotenv()
 fake = Faker()
 
 # === CONFIGURATION ===
-if os.environ.get('DJANGO_ENV') == 'prod':
-    API_BASE = "https://bhavincreditbook.pythonanywhere.com/api"
-else:
-    API_BASE = "http://127.0.0.1:8000/api"
+# if os.environ.get('DJANGO_ENV') == 'prod':
+API_BASE = "https://bhavincreditbook.pythonanywhere.com/api"
+# else:
+#     API_BASE = "http://127.0.0.1:8000/api"
 
 CUSTOMER_COUNT = 20
 MAX_TRANSACTIONS_PER_CUSTOMER = 10
 OWNER_USER_ID = 1  # Replace with your actual user ID
-AUTH_TOKEN = "74961b7b3301be58c9955f83249db549a2aefe82"  # Replace with your token
+AUTH_TOKEN = os.environ.get('AUTH_TOKEN') # Replace with your token
 
 HEADERS = {
     "Authorization": f"Token {AUTH_TOKEN}",
