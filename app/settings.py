@@ -26,7 +26,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-&6_6+h(ptsmv%)t!r%&(wpvgz#ijeq8+w(y30z$=x9ajp)d9&_")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 
@@ -92,14 +91,7 @@ WSGI_APPLICATION = 'app.wsgi.application'
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
 # By default
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#         'ATOMIC_REQUESTS': True,  # <--- Add this
-#     }
-# }
-DJANGO_ENV = os.environ.get('DJANGO_ENV', 'prod')
+DJANGO_ENV = os.environ.get('DJANGO_ENV', '')
 
 if DJANGO_ENV == 'dev':
     # Development: Use PostgreSQL (with pgAdmin as your admin interface)
@@ -123,10 +115,20 @@ elif DJANGO_ENV == 'prod':
             'PASSWORD': os.environ.get('MYSQL_PASSWORD', 'Bhavin@123'),
             'HOST': os.environ.get('MYSQL_HOST', 'bhavincreditbook.mysql.pythonanywhere-services.com'),
             'PORT': os.environ.get('MYSQL_PORT', '3306'),  # Default MySQL port
+            'OPTIONS': {
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
         }
     }
 else:
-    raise ValueError("Invalid DJANGO_ENV setting. Must be 'dev' or 'prod'.")
+    DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+        'ATOMIC_REQUESTS': True,  # <--- Add this
+    }
+}
+
 
 
 
@@ -199,7 +201,6 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "False") == "True"
-
 # SITE_ID = 1
 
 # SOCIALACCOUNT_ADAPTER = 'creditapp.adapters.CustomSocialAccountAdapter'
