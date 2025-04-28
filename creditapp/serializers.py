@@ -73,6 +73,15 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['password', 'is_approved', 'is_verified', 'is_active', 'is_owner', 'is_staff']
 
+# ----------------------------- User Transaction summury Serializer ----------------------------
+class UserTransactionSummarySerializer(serializers.Serializer):
+    total_customers = serializers.IntegerField()
+    total_credit_transactions = serializers.IntegerField()
+    total_debit_transactions = serializers.IntegerField()
+    total_credit_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_debit_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
 # ---------------------------- Customer Serializer ----------------------------
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:

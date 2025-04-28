@@ -26,6 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+add_entry_database.py
 media/*
 !media/default_profile/
 !media/default_profile/avatar_blank.jpg

@@ -11,7 +11,7 @@ from rest_framework.generics import UpdateAPIView
 from django.shortcuts import get_object_or_404
 from django.http import Http404
 from datetime import date
-from django.db.models import  Q
+from django.db.models import Sum, Count, Q
 from rest_framework.views import APIView
 import requests
 from dotenv import load_dotenv
@@ -192,6 +192,40 @@ def user_logout(request):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# ---------------------------- User Transaction Summary View ----------------------------
+class UserTransactionSummaryView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserTransactionSummarySerializer
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        # Get total customers for the user
+        total_customers = Customer.objects.filter(user=user).count()
+
+        # Get total transaction counts and amounts for credits and debits
+        transaction_summary = Transaction.objects.filter(customer__user=user).aggregate(
+            total_credit_transactions=Count('id', filter=Q(transaction_type='credit')),
+            total_debit_transactions=Count('id', filter=Q(transaction_type='debit')),
+            total_credit_amount=Sum('amount', filter=Q(transaction_type='credit')),
+            total_debit_amount=Sum('amount', filter=Q(transaction_type='debit')),
+        )
+
+        data = {
+            "total_customers": total_customers,
+            "total_credit_transactions": transaction_summary['total_credit_transactions'],
+            "total_debit_transactions": transaction_summary['total_debit_transactions'],
+            "total_credit_amount": transaction_summary['total_credit_amount'] or 0,
+            "total_debit_amount": transaction_summary['total_debit_amount'] or 0,
+        }
+
+        return Response(data)
+
+
+
+
+
+
 # ---------------------------- Customer Views ----------------------------
 class CustomerListCreateView(generics.ListCreateAPIView):
     """
@@ -287,7 +321,7 @@ class CustomerTransactionsView(generics.ListAPIView):
         return Transaction.objects.filter(customer=customer).only(
             'id', 'customer_id', 'amount', 'transaction_type', 'payment_mode', 
             'date', 'description', 'created_at'
-        ).select_related('customer')  # Optimize related customer lookups
+        ).select_related('customer').order_by('created_at')  # Optimize related customer lookups
 
     def list(self, request, *args, **kwargs):
         """

@@ -10,6 +10,7 @@ urlpatterns = [
     path('logout/', user_logout, name='logout'),
     path('edit/', UserEditAPIView.as_view(), name='user-edit'),
     path('user/profile/', get_user_profile),
+    path('user/transaction-summary/', UserTransactionSummaryView.as_view(), name='user-transaction-summary'),
     # path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
 
     # social login 
