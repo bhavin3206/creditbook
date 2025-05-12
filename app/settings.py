@@ -201,6 +201,17 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "False") == "True"
+ENVIRONMENT = os.environ.get("DJANGO_ENV", "False") == "True"
+
+if ENVIRONMENT == 'prod':
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+
 # SITE_ID = 1
 
 # SOCIALACCOUNT_ADAPTER = 'creditapp.adapters.CustomSocialAccountAdapter'
