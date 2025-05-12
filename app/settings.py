@@ -119,7 +119,7 @@ elif DJANGO_ENV == 'prod':
                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             },
         }
-}
+    }
 else:
     DATABASES = {
     'default': {
@@ -201,10 +201,6 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 if DJANGO_ENV == 'prod':
-    # SECURE_HSTS_SECONDS = 31536000
-    # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    # SECURE_HSTS_PRELOAD = True
-
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
