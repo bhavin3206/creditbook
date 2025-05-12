@@ -243,7 +243,7 @@ class CustomerListCreateView(generics.ListCreateAPIView):
         return Customer.objects.filter(user=self.request.user).only(
             'id', 'name', 'contact_number', 'email', 'address', 'account_balance', 
             'created_at', 'updated_at'
-        )
+        ).order_by('-created_at')  # Order by creation date
     
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -321,7 +321,7 @@ class CustomerTransactionsView(generics.ListAPIView):
         return Transaction.objects.filter(customer=customer).only(
             'id', 'customer_id', 'amount', 'transaction_type', 'payment_mode', 
             'date', 'description', 'created_at'
-        ).select_related('customer').order_by('created_at')  # Optimize related customer lookups
+        ).select_related('customer').order_by('-created_at')  # Optimize related customer lookups
 
     def list(self, request, *args, **kwargs):
         """
@@ -355,7 +355,7 @@ class TransactionListCreateView(generics.ListCreateAPIView):
         with additional filtering options.
         """
         user = self.request.user
-        queryset = Transaction.objects.filter(customer__user=user)
+        queryset = Transaction.objects.filter(customer__user=user).order_by('-created_at')
         
         # Get filter parameters
         customer_name = self.request.query_params.get('customer_name')
@@ -458,7 +458,7 @@ class PaymentReminderListCreateView(generics.ListCreateAPIView):
         belonging to the authenticated user.
         """
         user = self.request.user
-        queryset = PaymentReminder.objects.filter(customer__user=user)
+        queryset = PaymentReminder.objects.filter(customer__user=user).order_by('-created_at')
         
         # Use select_related for better query performance
         queryset = queryset.select_related('customer', 'transaction')
