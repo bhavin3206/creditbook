@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-&6_6+h(ptsmv%)t!r%&(wpvgz#ijeq8+w(y30z$=x9ajp)d9&_")
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "True") == "True"
+DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
@@ -200,10 +200,7 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "False") == "True"
-ENVIRONMENT = os.environ.get("DJANGO_ENV", "False") == "True"
-
-if ENVIRONMENT == 'prod':
+if DJANGO_ENV == 'prod':
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
@@ -211,6 +208,23 @@ if ENVIRONMENT == 'prod':
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
+    DEBUG = False
+    # ALLOWED_HOSTS = ['bhavincreditbook.pythonanywhere.com']
+    # CSRF_TRUSTED_ORIGINS = ['https://bhavincreditbook.pythonanywhere.com']
+    # CSRF_COOKIE_SAMESITE = 'None'
+    # CSRF_COOKIE_HTTPONLY = True
+    # SESSION_COOKIE_SAMESITE = 'None'
+    # SESSION_COOKIE_HTTPONLY = True
+    # X_FRAME_OPTIONS = 'DENY'
+    # SECURE_BROWSER_XSS_FILTER = True
+    # SECURE_CONTENT_TYPE_NOSNIFF = True
+    # SECURE_REFERRER_POLICY = 'same-origin'
+    # SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+    # SECURE_CROSS_ORIGIN_EMBEDDER_POLICY = 'require-corp'
+    # SECURE_CROSS_ORIGIN_RESOURCE_POLICY = 'same-origin'
+    # SECURE_HSTS_PRELOAD = True
+    # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
 
 # SITE_ID = 1
 
