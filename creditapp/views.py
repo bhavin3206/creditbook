@@ -392,9 +392,9 @@ class TransactionListCreateView(generics.ListCreateAPIView):
             filters &= Q(date__range=[start_date, end_date])
 
         # Filter by payment mode
-        if payment_mode:
-            filters &= Q(payment_mode=payment_mode)
-
+        if payment_mode :
+            filters &= Q(payment_mode=payment_mode) if payment_mode == "cash" else ~Q(payment_mode="cash")
+         
         # Filter by amount
         if amount:
             filters &= Q(amount=amount)
