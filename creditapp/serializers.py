@@ -205,7 +205,7 @@ class PaymentReminderSerializer(serializers.ModelSerializer):
         if transaction and customer and transaction.customer != customer:
             raise serializers.ValidationError("The transaction must belong to the given customer.")
 
-        if reminder_date and reminder_date == date.today():
-            raise serializers.ValidationError("Reminder date cannot be today.")
+        # if reminder_date and reminder_date == date.today():
+        #     raise serializers.ValidationError("Reminder date cannot be today.")
 
         return attrs
