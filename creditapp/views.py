@@ -413,6 +413,24 @@ class TransactionListCreateView(generics.ListCreateAPIView):
             'date', 'description', 'created_at', 'customer__name'
         )
 
+    def paginate_queryset(self, queryset):
+        """Disable pagination when ?pagination=false"""
+        pagination_param = self.request.query_params.get('pagination', 'true').lower()
+        if pagination_param == 'false':
+            return None
+        return super().paginate_queryset(queryset)
+
+    def list(self, request, *args, **kwargs):
+        """Return full list if pagination is disabled"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
         serializer.save()
 

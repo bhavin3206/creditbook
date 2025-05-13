@@ -114,6 +114,8 @@ class Customer(models.Model):
     def update_account_balance(self):
         self.account_balance = self.current_balance
         self.save(update_fields=['account_balance'])
+        if self.account_balance >= 0:
+            self.payment_reminders.filter(status='pending').update(status='paid')
 
     class Meta:
         unique_together = ['user', 'contact_number']
