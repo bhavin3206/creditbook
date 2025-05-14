@@ -499,6 +499,8 @@ class PaymentReminderListCreateView(generics.ListCreateAPIView):
             queryset = queryset.filter(reminder_date__gt=today, status="pending")
         elif payment_status == "due_today":
             queryset = queryset.filter(reminder_date=today, status="pending")
+        elif payment_status == "pending":
+            queryset = queryset.filter(status="pending")
 
         return queryset
     
