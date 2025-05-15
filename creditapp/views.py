@@ -188,6 +188,7 @@ def ResetPasswordView(request):
             return Response({"message": "Password must contain a special character (!@#$%^&*)."}, status=400)
 
         # Reset password
+        user = User.objects.get(email=email)
         user.set_password(password)
         user.save()
 
