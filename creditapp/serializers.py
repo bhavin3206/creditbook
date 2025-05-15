@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from datetime import  date
-from .models import User, Customer, Transaction, PaymentReminder
+from .models import User, Customer, Transaction, PaymentReminder, PendingUser
 import re
 from .utils import send_otp_email
 
@@ -9,13 +9,18 @@ from .utils import send_otp_email
 class SignupSerializer(serializers.ModelSerializer):
     mobile_number = serializers.CharField(required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
-    password = serializers.CharField(max_length=100, required=True, style={'input_type': 'password'}, write_only=True)
+    password = serializers.CharField(max_length=18, required=True, style={'input_type': 'password'}, write_only=True)
+    first_name = serializers.CharField(required=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
-        model = User
-        fields = ['first_name', 'last_name', 'mobile_number', 'email', 'password', 'address']
-
+        model = PendingUser
+        fields = '__all__' 
+        
     def validate(self, attrs):
+        from creditapp.models import PendingUser, User
+
         mobile_number = attrs.get('mobile_number', '')
         email = attrs.get('email', '')
         password = attrs.get('password', '')
@@ -29,7 +34,10 @@ class SignupSerializer(serializers.ModelSerializer):
         
             if "@gmail.com" not in email:
                 raise serializers.ValidationError('Please enter a valid Gmail address.')
-            
+
+        if PendingUser.objects.filter(email=email).exists():
+            raise serializers.ValidationError('OTP already sent. Please verify your email.')
+
         if len(password) < 8:  
             raise serializers.ValidationError({"password":"Password must be at least 8 characters long."})
         
@@ -47,24 +55,21 @@ class SignupSerializer(serializers.ModelSerializer):
 
         return attrs
 
-    def create(self, validated_data):
-        user = User.objects.create(
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name'],
-            mobile_number=validated_data['mobile_number'],
-            email=validated_data.get('email', None),
-            address=validated_data.get('address', None),
-            is_verified=False,
-            is_active=True,
-            is_approved=True,
-        )
-        user.set_password(validated_data['password'])
-        user.save()
+    # def create(self, validated_data):
+    #     user = PendingUser.objects.create(
+    #         first_name=validated_data.get('first_name', None),
+    #         last_name=validated_data.get('last_name', None),
+    #         mobile_number=validated_data.get('mobile_number', None),
+    #         email=validated_data.get('email', None),
+    #         address=validated_data.get('address', None),
+    #     )
+    #     user.set_password(validated_data['password'])
+    #     user.save()
 
-        if user.email:
-            send_otp_email(user.email)
+    #     if user.email:
+    #         send_otp_email(user.email)
 
-        return user
+    #     return user
 
 # ---------------------------- User Edit Serializer ----------------------------
 class UserSerializer(serializers.ModelSerializer):

@@ -83,6 +83,20 @@ class EmailOTP(models.Model):
     @staticmethod
     def generate_otp():
         return f"{random.randint(100000, 999999)}"
+    
+
+class PendingUser(models.Model):
+    email = models.EmailField(max_length=50, unique=True, null=True, blank=True, db_index=True)
+    mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True, db_index=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100, null=True, blank=True)
+    password = models.CharField(max_length=128)
+    address = models.TextField(null=True, blank=True,)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.email
+
 
 # Function to generate unique filename for uploaded images
 def get_file_path(instance, filename):

@@ -78,21 +78,42 @@ class GoogleLoginView(APIView):
             return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
 # ---------------------------- Signup View ----------------------------
+# @api_view(['POST'])
+# def SignupView(request):
+#     if request.method == 'POST':
+#         serializer = SignupSerializer(data=request.data)
+#         try:
+#             if serializer.is_valid(raise_exception=True):
+#                 user = serializer.save()
+#                 return Response({"message": "User created successfully."}, status=status.HTTP_201_CREATED)
+#         except serializers.ValidationError as e:
+#             response = str(next(iter(e.detail.values())))
+#             if "This field is required." in response: 
+#                 response = str(next(iter(e.detail.keys()))) + " field is required"
+#                 return Response({"message": response}, status=status.HTTP_400_BAD_REQUEST)
+
+#             return Response({"message": str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
 def SignupView(request):
-    if request.method == 'POST':
-        serializer = SignupSerializer(data=request.data)
-        try:
-            if serializer.is_valid(raise_exception=True):
-                user = serializer.save()
-                return Response({"message": "User created successfully."}, status=status.HTTP_201_CREATED)
-        except serializers.ValidationError as e:
-            response = str(next(iter(e.detail.values())))
-            if "This field is required." in response: 
-                response = str(next(iter(e.detail.keys()))) + " field is required"
-                return Response({"message": response}, status=status.HTTP_400_BAD_REQUEST)
+    serializer = SignupSerializer(data=request.data)
+    if serializer.is_valid():
+        data = serializer.validated_data
 
-            return Response({"message": str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
+        # Save user in PendingUser table
+        PendingUser.objects.create(
+            email=data.get('email', None),
+            first_name=data.get('first_name', None),
+            last_name=data.get('last_name', None),
+            mobile_number=data.get('mobile_number',None),
+            address=data.get('address',None),
+            password=data.get('password', None),  # optionally hash if needed
+        )
+
+        send_otp_email(data.get('email'))
+
+        return Response({"message": "OTP sent to your email. Please verify to complete signup."}, status=200)
+    return Response(serializer.errors, status=400)
+
         
 # ---------------------------- Email OTP Verification View ----------------------------
 @api_view(['POST'])
@@ -108,19 +129,60 @@ def VerifyEmailOTPView(request):
         if otp_obj.is_expired():
             return Response({"message": "OTP expired"}, status=400)
 
-        EmailOTP.objects.filter(email=email).delete()
+        pending = PendingUser.objects.get(email=email)
 
-        user = User.objects.get(email=email)
-        user.is_verified = True
-        user.is_approved = True
+        user = User.objects.create(
+            first_name=pending.first_name,
+            last_name=pending.last_name or None,
+            email=pending.email or None,
+            mobile_number=pending.mobile_number or None,
+            address=pending.address or None,
+            is_verified=True,
+            is_active=True,
+            is_approved=True,
+        )
+        user.set_password(pending.password)
         user.save()
 
-        return Response({"message": "Email verified successfully"}, status=200)
+        # Clean up
+        pending.delete()
+        EmailOTP.objects.filter(email=email).delete()
+
+        return Response({"message": "User created and email verified."}, status=201)
 
     except EmailOTP.DoesNotExist:
         return Response({"message": "Invalid or used OTP"}, status=400)
-    except User.DoesNotExist:
-        return Response({"message": "User not found"}, status=404)
+    except PendingUser.DoesNotExist:
+        return Response({"message": "No pending signup found for this email"}, status=404)
+    except Exception as e:
+        return Response({"message": "An error occurred " }, status=500)
+
+# @api_view(['POST'])
+# def VerifyEmailOTPView(request):
+#     email = request.data.get('email')
+#     otp = request.data.get('otp')
+
+#     if not email or not otp:
+#         return Response({"message": "Email and OTP are required"}, status=400)
+
+#     try:
+#         otp_obj = EmailOTP.objects.filter(email=email, otp=otp, is_used=False).latest('created_at')
+#         if otp_obj.is_expired():
+#             return Response({"message": "OTP expired"}, status=400)
+
+#         EmailOTP.objects.filter(email=email).delete()
+
+#         user = User.objects.get(email=email)
+#         user.is_verified = True
+#         user.is_approved = True
+#         user.save()
+
+#         return Response({"message": "Email verified successfully"}, status=200)
+
+#     except EmailOTP.DoesNotExist:
+#         return Response({"message": "Invalid or used OTP"}, status=400)
+#     except User.DoesNotExist:
+#         return Response({"message": "User not found"}, status=404)
 
 
 
@@ -132,7 +194,7 @@ def ResendEmailOTPView(request):
 
     try:
         user = User.objects.get(email=email)
-        if user.is_verified:
+        if user and user.is_verified:
             return Response({"message": "Email is already verified."}, status=400)
 
         send_otp_email(email)
@@ -142,19 +204,19 @@ def ResendEmailOTPView(request):
         return Response({"message": "No user with this email found."}, status=404)
 
 
-# ---------------------------- Forgot password View ----------------------------
-@api_view(['POST'])
-def ForgotPasswordRequestView(request):
-    email = request.data.get('email')
-    if not email:
-        return Response({"message": "Email is required."}, status=400)
+# # ---------------------------- Forgot password View ----------------------------
+# @api_view(['POST'])
+# def ForgotPasswordRequestView(request):
+#     email = request.data.get('email')
+#     if not email:
+#         return Response({"message": "Email is required."}, status=400)
     
-    user = User.objects.filter(email=email).first()
-    if not user:
-        return Response({"message": "No user with this email found."}, status=404)
+#     user = User.objects.filter(email=email).first()
+#     if not user:
+#         return Response({"message": "No user with this email found."}, status=404)
 
-    send_otp_email(user.email)  # Send and save OTP
-    return Response({"message": "OTP has been sent to your email."}, status=200)
+#     send_otp_email(user.email)  # Send and save OTP
+#     return Response({"message": "OTP has been sent to your email."}, status=200)
 
 # ---------------------------- Reset Password View ----------------------------
 

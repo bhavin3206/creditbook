@@ -7,14 +7,14 @@ urlpatterns = [
     # Authentication URLs
     path('signup/', SignupView, name='signup'),
     path('verify-email-otp/', VerifyEmailOTPView, name='verify_email_otp'),
-    path('resend-email-otp/', ResendEmailOTPView, name='resend_email_otp'),
-    path('forgot-password/', ForgotPasswordRequestView, name='forgot_password'),
+    path('send-email-otp/', ResendEmailOTPView, name='resend_email_otp'),
     path('reset-password/', ResetPasswordView, name='reset-password'),
     path('signin/', user_login, name='signin'),
     path('logout/', user_logout, name='logout'),
     path('edit/', UserEditAPIView.as_view(), name='user-edit'),
     path('user/profile/', get_user_profile),
     path('user/transaction-summary/', UserTransactionSummaryView.as_view(), name='user-transaction-summary'),
+    # path('forgot-password/', ForgotPasswordRequestView, name='forgot_password'),
     # path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
 
     # social login 
