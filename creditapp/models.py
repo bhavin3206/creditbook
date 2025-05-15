@@ -7,6 +7,8 @@ from django.db.models.signals import  post_delete
 from django.dispatch import receiver
 from django.db.models import F, Sum, Case, When, DecimalField
 from django.utils.functional import cached_property
+from django.utils import timezone
+import random
 
 # Custom User Manager
 class UserManager(BaseUserManager):
@@ -56,7 +58,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    USERNAME_FIELD = 'mobile_number'
+    USERNAME_FIELD = 'email'
     objects = UserManager()
 
     def __str__(self):
@@ -67,6 +69,20 @@ class User(AbstractBaseUser, PermissionsMixin):
             models.Index(fields=['email']),
             models.Index(fields=['mobile_number']),
         ]
+
+
+class EmailOTP(models.Model):
+    email = models.EmailField()
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
+
+    def is_expired(self):
+        return timezone.now() > self.created_at + timezone.timedelta(minutes=10)
+
+    @staticmethod
+    def generate_otp():
+        return f"{random.randint(100000, 999999)}"
 
 # Function to generate unique filename for uploaded images
 def get_file_path(instance, filename):

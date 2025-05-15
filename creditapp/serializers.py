@@ -2,11 +2,13 @@ from rest_framework import serializers
 from datetime import  date
 from .models import User, Customer, Transaction, PaymentReminder
 import re
+from .utils import send_otp_email
+
 
 # ---------------------------- Signup Serializer ----------------------------
 class SignupSerializer(serializers.ModelSerializer):
-    mobile_number = serializers.CharField(required=True)
-    email = serializers.EmailField(required=False)
+    mobile_number = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
     password = serializers.CharField(max_length=100, required=True, style={'input_type': 'password'}, write_only=True)
 
     class Meta:
@@ -17,16 +19,17 @@ class SignupSerializer(serializers.ModelSerializer):
         mobile_number = attrs.get('mobile_number', '')
         email = attrs.get('email', '')
         password = attrs.get('password', '')
-        
-        if User.objects.filter(mobile_number__iexact=mobile_number).exists():
+
+        if mobile_number and User.objects.filter(mobile_number__iexact=mobile_number).exists():
             raise serializers.ValidationError('Mobile number already exists! Please try another one.')
         
-        if email and User.objects.filter(email__iexact=email).exists():
-            raise serializers.ValidationError('Email already exists! Please try another one.')
+        if email :
+            if User.objects.filter(email__iexact=email).exists():
+                raise serializers.ValidationError('Email already exists! Please try another one.')
         
-        if email and "@gmail.com" not in email:
-            raise serializers.ValidationError('Please enter a valid Gmail email address.')
-        
+            if "@gmail.com" not in email:
+                raise serializers.ValidationError('Please enter a valid Gmail address.')
+            
         if len(password) < 8:  
             raise serializers.ValidationError({"password":"Password must be at least 8 characters long."})
         
@@ -51,12 +54,15 @@ class SignupSerializer(serializers.ModelSerializer):
             mobile_number=validated_data['mobile_number'],
             email=validated_data.get('email', None),
             address=validated_data.get('address', None),
-            is_verified=True,
+            is_verified=False,
             is_active=True,
             is_approved=True,
         )
         user.set_password(validated_data['password'])
         user.save()
+
+        if user.email:
+            send_otp_email(user.email)
 
         return user
 

@@ -15,6 +15,7 @@ from django.db.models import Sum, Count, Q
 from rest_framework.views import APIView
 import requests
 from dotenv import load_dotenv
+from .utils import send_otp_email
 
 load_dotenv()
 
@@ -92,6 +93,113 @@ def SignupView(request):
                 return Response({"message": response}, status=status.HTTP_400_BAD_REQUEST)
 
             return Response({"message": str(next(iter(e.detail.values()))[0])}, status=status.HTTP_400_BAD_REQUEST)
+        
+# ---------------------------- Email OTP Verification View ----------------------------
+@api_view(['POST'])
+def VerifyEmailOTPView(request):
+    email = request.data.get('email')
+    otp = request.data.get('otp')
+
+    if not email or not otp:
+        return Response({"message": "Email and OTP are required"}, status=400)
+
+    try:
+        otp_obj = EmailOTP.objects.filter(email=email, otp=otp, is_used=False).latest('created_at')
+        if otp_obj.is_expired():
+            return Response({"message": "OTP expired"}, status=400)
+
+        EmailOTP.objects.filter(email=email).delete()
+
+        user = User.objects.get(email=email)
+        user.is_verified = True
+        user.is_approved = True
+        user.save()
+
+        return Response({"message": "Email verified successfully"}, status=200)
+
+    except EmailOTP.DoesNotExist:
+        return Response({"message": "Invalid or used OTP"}, status=400)
+    except User.DoesNotExist:
+        return Response({"message": "User not found"}, status=404)
+
+
+
+@api_view(['POST'])
+def ResendEmailOTPView(request):
+    email = request.data.get('email')
+    if not email:
+        return Response({"message": "Email is required"}, status=400)
+
+    try:
+        user = User.objects.get(email=email)
+        if user.is_verified:
+            return Response({"message": "Email is already verified."}, status=400)
+
+        send_otp_email(email)
+        return Response({"message": "OTP resent successfully."}, status=200)
+
+    except User.DoesNotExist:
+        return Response({"message": "No user with this email found."}, status=404)
+
+
+# ---------------------------- Forgot password View ----------------------------
+@api_view(['POST'])
+def ForgotPasswordRequestView(request):
+    email = request.data.get('email')
+    if not email:
+        return Response({"message": "Email is required."}, status=400)
+    
+    user = User.objects.filter(email=email).first()
+    if not user:
+        return Response({"message": "No user with this email found."}, status=404)
+
+    send_otp_email(user.email)  # Send and save OTP
+    return Response({"message": "OTP has been sent to your email."}, status=200)
+
+# ---------------------------- Reset Password View ----------------------------
+
+@api_view(['POST'])
+def ResetPasswordView(request):
+    email = request.data.get('email')
+    otp = request.data.get('otp')
+    password = request.data.get('password')
+
+    if not otp or not password:
+        return Response({"message": "OTP and password are required"}, status=400)
+
+    if not email:
+        return Response({"message": "Authenticated user has no email"}, status=400)
+
+    try:
+        otp_obj = EmailOTP.objects.filter(email=email, otp=otp, is_used=False).latest('created_at')
+        if otp_obj.is_expired():
+            return Response({"message": "OTP has expired"}, status=400)
+
+        # Validate password
+        if len(password) < 8:
+            return Response({"message": "Password must be at least 8 characters long."}, status=400)
+        if not re.search(r'[A-Z]', password):
+            return Response({"message": "Password must contain an uppercase letter."}, status=400)
+        if not re.search(r'[a-z]', password):
+            return Response({"message": "Password must contain a lowercase letter."}, status=400)
+        if not re.search(r'[0-9]', password):
+            return Response({"message": "Password must contain a digit."}, status=400)
+        if not re.search(r'[!@#$%^&*]', password):
+            return Response({"message": "Password must contain a special character (!@#$%^&*)."}, status=400)
+
+        # Reset password
+        user.set_password(password)
+        user.save()
+
+        EmailOTP.objects.filter(email=email).delete()  # Delete all OTPs for this email
+
+        return Response({"message": "Password reset successful."}, status=200)
+
+    except EmailOTP.DoesNotExist:
+        return Response({"message": "Invalid or used OTP."}, status=400)
+
+
+
 
 # ---------------------------- Signin View ----------------------------
 @api_view(['POST'])
