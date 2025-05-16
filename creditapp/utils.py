@@ -17,7 +17,7 @@ def send_otp_email(email):
         resend.api_key = "re_QDCfjnSN_NJvnbrxvcDMuZc6ZBvQoe5ih"
 
         r = resend.Emails.send({
-        "from": "onboarding@resend.dev",
+        "from": "noreplay - <onboarding@resend.dev>",
         "to":email,
         "subject": "Hello World",
         "html": f"""
