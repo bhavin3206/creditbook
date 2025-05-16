@@ -7,7 +7,7 @@ urlpatterns = [
     # Authentication URLs
     path('signup/', SignupView, name='signup'),
     path('verify-email-otp/', VerifyEmailOTPView, name='verify_email_otp'),
-    path('send-email-otp/', ResendEmailOTPView, name='resend_email_otp'),
+    path('send-email-otp/', sendEmailOTPView, name='resend_email_otp'),
     path('reset-password/', ResetPasswordView, name='reset-password'),
     path('signin/', user_login, name='signin'),
     path('logout/', user_logout, name='logout'),

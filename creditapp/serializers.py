@@ -2,7 +2,8 @@ from rest_framework import serializers
 from datetime import  date
 from .models import User, Customer, Transaction, PaymentReminder, PendingUser
 import re
-from .utils import send_otp_email
+from .utils import send_otp_email, validate_password
+from rest_framework.exceptions import ValidationError
 
 
 # ---------------------------- Signup Serializer ----------------------------
@@ -38,20 +39,10 @@ class SignupSerializer(serializers.ModelSerializer):
         if PendingUser.objects.filter(email=email).exists():
             raise serializers.ValidationError('OTP already sent. Please verify your email.')
 
-        if len(password) < 8:  
-            raise serializers.ValidationError({"password":"Password must be at least 8 characters long."})
-        
-        if not re.search(r'[A-Z]', password):
-            raise serializers.ValidationError({"password":"Password must contain at least one uppercase letter."})
-        
-        if not re.search(r'[a-z]', password):
-            raise serializers.ValidationError({"password":"Password must contain at least one lowercase letter."})
-        
-        if not re.search(r'[0-9]', password):
-            raise serializers.ValidationError({"password":"Password must contain at least one digit."})
-        
-        if not re.search(r'[!@#$%^&*]', password):
-            raise serializers.ValidationError({"password":"Password must contain at least one special character: !@#$%^&*"})
+        try:
+            validate_password(password)
+        except ValidationError as e:
+            raise serializers.ValidationError({"password": e.detail})
 
         return attrs
 
